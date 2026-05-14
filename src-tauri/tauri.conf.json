@@ -34,18 +34,41 @@
     "category": "Productivity",
     "shortDescription": "Manage your skills and knowledge",
     "longDescription": "SkillVault is a desktop application that helps you organize, track, and improve your skills and knowledge base.",
+    "outputDir": "../release",
     "macOS": {
       "minimumSystemVersion": "10.15",
-      "entitlements": null
+      "entitlements": "entitlements.plist",
+      "signingIdentity": null,
+      "hardenedRuntime": true,
+      "notarization": {
+        "teamId": null,
+        "appleId": null,
+        "appleIdPassword": null
+      },
+      "dmg": {
+        "background": null,
+        "iconSize": 80,
+        "windowPosition": { "x": 100, "y": 100 },
+        "windowSize": { "width": 600, "height": 400 }
+      }
     },
     "windows": {
       "certificateThumbprint": null,
+      "certificatePassword": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": "http://timestamp.digicert.com",
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true }
     },
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [
+          "libwebkit2gtk-4.0-37",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
       }
     }
   },
@@ -63,7 +86,7 @@
     "dialog": {},
     "updater": {
       "endpoints": [],
-      "pubkey": ""
+      "pubkey": "" /* Generate with `tauri signer generate` and paste public key here */
     },
     "shell": {
       "scope": []

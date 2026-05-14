@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "SkillVault - A desktop application for managing your skills and knowledge"
 edition = "2021"
 build = "build.rs"
+authors = ["SkillVault Team <team@skillvault.com>"]
+repository = "https://github.com/skillvault/skillvault"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 tauri = { version = "2.0.0", features = ["tray-icon"] }

@@ -28,3 +28,8 @@ src-tauri/target
 src-tauri/Cargo.lock
 src-tauri/icons
 src-tauri/bundle
+release/
+
+# Signing configuration
+.sign/*
+!.sign/README.md
