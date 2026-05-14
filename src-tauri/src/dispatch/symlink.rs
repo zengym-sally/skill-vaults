@@ -95,3 +95,14 @@ pub async fn dispatch_skill(
 
     Ok(dispatch)
 }
+
+/// List all dispatch rules
+#[tauri::command]
+pub async fn list_dispatches(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<Dispatch>, String> {
+    Dispatch::get_all(&pool)
+        .await
+        .map_err(|e| format!("Failed to list dispatches: {}", e))
+}
+

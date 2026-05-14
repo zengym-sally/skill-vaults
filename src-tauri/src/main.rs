@@ -323,7 +323,8 @@ fn main() {
             dispatch::add_target_dir,
             dispatch::list_target_dirs,
             dispatch::delete_target_dir,
-            dispatch::dispatch_skill
+            dispatch::dispatch_skill,
+            dispatch::list_dispatches
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

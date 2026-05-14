@@ -1,14 +1,16 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { TargetDir, CreateTargetDir } from "../types/dispatch";
+import { TargetDir, CreateTargetDir, Dispatch } from "../types/dispatch";
 
 interface DispatchStore {
   targetDirs: TargetDir[];
+  dispatches: Dispatch[];
   loading: boolean;
   error: string | null;
 
   // Actions
   fetchTargetDirs: () => Promise<void>;
+  fetchDispatches: () => Promise<void>;
   addTargetDir: (create: CreateTargetDir) => Promise<TargetDir>;
   deleteTargetDir: (id: string) => Promise<void>;
   clearError: () => void;
@@ -16,6 +18,7 @@ interface DispatchStore {
 
 export const useDispatchStore = create<DispatchStore>((set, get) => ({
   targetDirs: [],
+  dispatches: [],
   loading: false,
   error: null,
 
@@ -24,6 +27,20 @@ export const useDispatchStore = create<DispatchStore>((set, get) => ({
     try {
       const targetDirs = await invoke<TargetDir[]>("list_target_dirs");
       set({ targetDirs, loading: false });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : String(error),
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
+  fetchDispatches: async () => {
+    set({ loading: true, error: null });
+    try {
+      const dispatches = await invoke<Dispatch[]>("list_dispatches");
+      set({ dispatches, loading: false });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : String(error),

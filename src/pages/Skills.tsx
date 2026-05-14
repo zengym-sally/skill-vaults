@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSkillStore } from "../store/skillStore";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -17,8 +17,11 @@ import {
   Plus,
   Search,
   AlertCircle,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DispatchDialog } from "../components/skills/DispatchDialog";
+import { Skill } from "../types/skill";
 
 const Badge = ({
   children,
@@ -46,6 +49,8 @@ export function Skills() {
     setSearchQuery,
     clearError,
   } = useSkillStore();
+  const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
+  const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchSkills();
@@ -84,6 +89,11 @@ export function Skills() {
           toast.error(`Failed to delete skill: ${error.message}`);
         });
     }
+  };
+
+  const handleDispatch = (skill: Skill) => {
+    setSelectedSkill(skill);
+    setDispatchDialogOpen(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -229,6 +239,14 @@ export function Skills() {
                   Updated {new Date(skill.updatedAt).toLocaleDateString()}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDispatch(skill)}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    Dispatch
+                  </Button>
                   <Button variant="ghost" size="sm" disabled>
                     <Edit className="h-4 w-4 mr-1" />
                     Edit
@@ -248,6 +266,12 @@ export function Skills() {
           ))}
         </div>
       )}
+
+      <DispatchDialog
+        skill={selectedSkill}
+        open={dispatchDialogOpen}
+        onOpenChange={setDispatchDialogOpen}
+      />
     </div>
   );
 }
