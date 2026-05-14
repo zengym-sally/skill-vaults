@@ -44,6 +44,8 @@ pub fn load_test_env() {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 /// Test LLM configuration structure
 #[derive(Debug, Clone)]
 pub struct TestLLMConfig {
@@ -62,6 +64,8 @@ impl Default for TestLLMConfig {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 /// Get test LLM configuration from environment variables or defaults
 pub fn get_test_llm_config() -> TestLLMConfig {
     TestLLMConfig {

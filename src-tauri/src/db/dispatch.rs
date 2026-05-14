@@ -112,33 +112,6 @@ fn map_row_to_dispatch(row: &sqlx::sqlite::SqliteRow) -> Result<Dispatch> {
 }
 
 impl Dispatch {
-    /// Create dispatch table with proper schema and foreign key constraint
-    pub async fn create_table(pool: &SqlitePool) -> Result<()> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS dispatch (
-                id TEXT PRIMARY KEY,
-                target_dir TEXT NOT NULL,
-                skill_id TEXT NOT NULL,
-                method TEXT NOT NULL,
-                source_path TEXT NOT NULL,
-                dest_path TEXT NOT NULL,
-                dispatched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_synced_at DATETIME,
-                sync_status TEXT NOT NULL,
-                error_message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
-            )
-            "#,
-        )
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
-
     /// Create a new dispatch rule
     pub async fn create(
         pool: &SqlitePool,
@@ -193,28 +166,6 @@ impl Dispatch {
         let rows = sqlx::query("SELECT * FROM dispatch ORDER BY created_at DESC")
             .fetch_all(pool)
             .await?;
-
-        rows.iter().map(|r| map_row_to_dispatch(r)).collect()
-    }
-
-    /// Get dispatch rules by skill id
-    pub async fn get_by_skill_id(pool: &SqlitePool, skill_id: &str) -> Result<Vec<Self>> {
-        let rows =
-            sqlx::query("SELECT * FROM dispatch WHERE skill_id = ? ORDER BY created_at DESC")
-                .bind(skill_id)
-                .fetch_all(pool)
-                .await?;
-
-        rows.iter().map(|r| map_row_to_dispatch(r)).collect()
-    }
-
-    /// Get dispatch rules by sync status
-    pub async fn get_by_sync_status(pool: &SqlitePool, status: SyncStatus) -> Result<Vec<Self>> {
-        let rows =
-            sqlx::query("SELECT * FROM dispatch WHERE sync_status = ? ORDER BY created_at DESC")
-                .bind(status.to_string())
-                .fetch_all(pool)
-                .await?;
 
         rows.iter().map(|r| map_row_to_dispatch(r)).collect()
     }
@@ -299,12 +250,4 @@ impl Dispatch {
         map_row_to_dispatch(&row)
     }
 
-    /// Delete dispatch rule
-    pub async fn delete(&self, pool: &SqlitePool) -> Result<()> {
-        sqlx::query("DELETE FROM dispatch WHERE id = ?")
-            .bind(&self.id)
-            .execute(pool)
-            .await?;
-        Ok(())
-    }
 }

@@ -63,6 +63,7 @@ impl OpenAIClient {
         }
     }
 
+    #[cfg(test)]
     pub fn api_base(&self) -> &str {
         &self.base_url
     }

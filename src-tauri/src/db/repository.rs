@@ -66,15 +66,6 @@ impl Repository {
         Ok(repo)
     }
     
-    /// Get repository by path
-    pub async fn get_by_path(pool: &SqlitePool, path: &str) -> Result<Option<Self>, Box<dyn std::error::Error>> {
-        let repo = sqlx::query_as::<_, Repository>("SELECT * FROM repositories WHERE path = ?1")
-            .bind(path)
-            .fetch_optional(pool)
-            .await?;
-        Ok(repo)
-    }
-    
     /// Update repository
     pub async fn update(
         &self,

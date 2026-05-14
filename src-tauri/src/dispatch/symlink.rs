@@ -250,19 +250,3 @@ async fn process_single_dispatch_with_skill(
     Ok(dispatch)
 }
 
-/// Helper function to process a single dispatch (reused from dispatch_skill)
-async fn process_single_dispatch(
-    skill_id: &str,
-    target_dir: &TargetDir,
-    dispatch_method: DispatchMethod,
-    pool: &SqlitePool,
-) -> Result<Dispatch, String> {
-    // Get skill by ID
-    let skill = Skill::get_by_id(pool, skill_id)
-        .await
-        .map_err(|e| format!("Failed to get skill: {}", e))?
-        .ok_or_else(|| format!("Skill with id {} not found", skill_id))?;
-
-    process_single_dispatch_with_skill(&skill, target_dir, dispatch_method, pool).await
-}
-

@@ -96,37 +96,7 @@ pub fn map_row_to_skill(row: &sqlx::sqlite::SqliteRow) -> Result<Skill> {
     })
 }
 
-/// Create the skills table if it doesn't exist
-pub async fn create_table(pool: &sqlx::SqlitePool) -> Result<()> {
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS skills (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL,
-            source_type TEXT NOT NULL,
-            repository_id TEXT,
-            local_path TEXT NOT NULL,
-            description TEXT,
-            usage TEXT,
-            tags TEXT NOT NULL DEFAULT '[]',
-            dependencies TEXT NOT NULL DEFAULT '[]',
-            llm_analyzed BOOLEAN NOT NULL DEFAULT 0,
-            quality_score INTEGER,
-            status TEXT NOT NULL,
-            first_discovered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
-
+#[cfg(test)]
 /// Create a new skill
 pub async fn create_skill(pool: &sqlx::SqlitePool, create: CreateSkill) -> Result<Skill> {
     let mut skills = bulk_create_skills(pool, vec![create]).await?;
@@ -213,6 +183,7 @@ pub async fn get_skill_by_id(pool: &sqlx::SqlitePool, id: &str) -> Result<Option
     }
 }
 
+#[cfg(test)]
 /// Get all skills
 pub async fn get_all_skills(pool: &sqlx::SqlitePool) -> Result<Vec<Skill>> {
     let rows = sqlx::query("SELECT * FROM skills")
@@ -286,19 +257,6 @@ pub async fn delete_skill(pool: &sqlx::SqlitePool, id: &str) -> Result<bool> {
         .await?;
 
     Ok(result.rows_affected() > 0)
-}
-
-/// Get skills by repository ID
-pub async fn get_skills_by_repository(
-    pool: &sqlx::SqlitePool,
-    repository_id: &str,
-) -> Result<Vec<Skill>> {
-    let rows = sqlx::query("SELECT * FROM skills WHERE repository_id = ?")
-        .bind(repository_id)
-        .fetch_all(pool)
-        .await?;
-
-    rows.iter().map(|r| map_row_to_skill(r)).collect()
 }
 
 impl Skill {

@@ -39,14 +39,6 @@ impl Config {
         Ok(value)
     }
     
-    /// Get all config entries
-    pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Self>, Box<dyn std::error::Error>> {
-        let configs = sqlx::query_as::<_, Config>("SELECT * FROM config")
-            .fetch_all(pool)
-            .await?;
-        Ok(configs)
-    }
-    
     /// Delete a config entry
     pub async fn delete(pool: &SqlitePool, key: &str) -> Result<(), Box<dyn std::error::Error>> {
         sqlx::query("DELETE FROM config WHERE key = ?1")
