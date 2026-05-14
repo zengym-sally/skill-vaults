@@ -20,6 +20,7 @@ sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "json
 anyhow = "1.0"
 walkdir = "2.5"
 uuid = { version = "1.0", features = ["v4", "serde"] }
+reqwest = { version = "0.12", features = ["json", "native-tls"] }
 
 [build-dependencies]
 tauri-build = "2.0.0"

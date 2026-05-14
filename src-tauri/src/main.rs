@@ -7,6 +7,7 @@ mod db;
 mod config;
 mod git;
 mod skills;
+mod llm;
 
 use std::path::Path;
 use std::fs;
@@ -316,7 +317,8 @@ fn main() {
             skills::discovery::discover_skills,
             skills::crud::list_skills,
             skills::crud::update_skill_command,
-            skills::crud::delete_skill_command
+            skills::crud::delete_skill_command,
+            skills::analyzer::analyze_skill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

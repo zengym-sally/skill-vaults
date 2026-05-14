@@ -283,3 +283,59 @@ pub async fn delete_skill(pool: &sqlx::SqlitePool, id: &str) -> Result<bool> {
 
     Ok(result.rows_affected() > 0)
 }
+
+impl Skill {
+    pub async fn get_by_id(pool: &sqlx::SqlitePool, id: &str) -> Result<Option<Self>, anyhow::Error> {
+        get_skill_by_id(pool, id).await
+    }
+
+    pub async fn update_analysis(
+        &mut self,
+        pool: &sqlx::SqlitePool,
+        skill_type: &str,
+        description: &str,
+        usage: &str,
+        tags: &str,
+        dependencies: &str,
+        quality_score: i32,
+    ) -> Result<(), sqlx::Error> {
+        let tags: Vec<String> = serde_json::from_str(tags).unwrap_or_default();
+        let dependencies: Vec<String> = serde_json::from_str(dependencies).unwrap_or_default();
+
+        sqlx::query!(
+            r#"
+            UPDATE skills
+            SET
+                type = ?,
+                description = ?,
+                usage = ?,
+                tags = ?,
+                dependencies = ?,
+                llm_analyzed = 1,
+                quality_score = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            "#,
+            skill_type,
+            description,
+            usage,
+            tags,
+            dependencies,
+            quality_score,
+            self.id
+        )
+        .execute(pool)
+        .await?;
+
+        self.r#type = skill_type.to_string();
+        self.description = Some(description.to_string());
+        self.usage = Some(usage.to_string());
+        self.tags = tags;
+        self.dependencies = dependencies;
+        self.llm_analyzed = true;
+        self.quality_score = Some(quality_score);
+        self.updated_at = Utc::now();
+
+        Ok(())
+    }
+}
