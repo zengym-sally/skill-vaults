@@ -404,7 +404,7 @@ async fn add_repository(
         let url = url.ok_or_else(|| "URL is required for Git repositories".to_string())?;
         
         // 创建仓库记录
-        let mut repo = db::repository::Repository::create(
+        let repo = db::repository::Repository::create(
             &pool,
             name,
             Some(url),
@@ -453,7 +453,7 @@ async fn add_repository(
         }
         
         // 创建仓库记录
-        let mut repo = db::repository::Repository::create(
+        let repo = db::repository::Repository::create(
             &pool,
             name,
             None,
@@ -560,7 +560,7 @@ async fn sync_repository(
     id: &str,
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<db::repository::Repository, String> {
-    let mut repo = db::repository::Repository::get_by_id(&pool, id)
+    let repo = db::repository::Repository::get_by_id(&pool, id)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Repository not found".to_string())?;
@@ -593,7 +593,7 @@ async fn sync_all_repositories(
     
     let mut updated_repos = Vec::new();
     
-    for mut repo in repos {
+    for repo in repos {
         if repo.source_type == "git" && repo.url.is_some() {
             let _ = repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await;
             
