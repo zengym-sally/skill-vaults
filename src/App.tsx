@@ -1,7 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useConfigStore } from "./store/configStore";
+import Onboarding from "./pages/Onboarding";
+import { Loader2 } from "lucide-react";
 
 function App() {
   const [count, setCount] = useState(0);
+  const { basePath, isLoading, getBasePath } = useConfigStore();
+
+  useEffect(() => {
+    getBasePath();
+  }, [getBasePath]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
+        <p className="text-gray-600">加载中...</p>
+      </div>
+    );
+  }
+
+  if (!basePath) {
+    return <Onboarding />;
+  }
 
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -12,6 +33,10 @@ function App() {
         <p className="text-lg text-gray-600 mb-8">
           Your personal knowledge management tool built with Tauri 2.x + React +
           TypeScript
+        </p>
+        <p className="text-sm text-green-600 mb-6 font-medium">
+          当前基础目录:{" "}
+          <code className="bg-green-50 px-2 py-1 rounded">{basePath}</code>
         </p>
 
         <div className="flex gap-4 justify-center">
