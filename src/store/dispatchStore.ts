@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { TargetDir, CreateTargetDir, Dispatch } from "../types/dispatch";
+import {
+  TargetDir,
+  CreateTargetDir,
+  Dispatch,
+  SyncStatus,
+} from "../types/dispatch";
 
 interface DispatchStore {
   targetDirs: TargetDir[];
@@ -13,6 +18,8 @@ interface DispatchStore {
   fetchDispatches: () => Promise<void>;
   addTargetDir: (create: CreateTargetDir) => Promise<TargetDir>;
   deleteTargetDir: (id: string) => Promise<void>;
+  checkDispatchSync: (dispatchId: string) => Promise<SyncStatus>;
+  syncDispatchedSkill: (dispatchId: string) => Promise<Dispatch>;
   clearError: () => void;
 }
 
@@ -73,6 +80,52 @@ export const useDispatchStore = create<DispatchStore>((set, get) => ({
         targetDirs: state.targetDirs.filter((dir) => dir.id !== id),
         loading: false,
       }));
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : String(error),
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
+  checkDispatchSync: async (dispatchId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const status = await invoke<SyncStatus>("check_dispatch_sync", {
+        dispatchId,
+      });
+      set((state) => ({
+        dispatches: state.dispatches.map((dispatch) =>
+          dispatch.id === dispatchId
+            ? { ...dispatch, sync_status: status }
+            : dispatch,
+        ),
+        loading: false,
+      }));
+      return status;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : String(error),
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
+  syncDispatchedSkill: async (dispatchId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedDispatch = await invoke<Dispatch>("sync_dispatched_skill", {
+        dispatchId,
+      });
+      set((state) => ({
+        dispatches: state.dispatches.map((dispatch) =>
+          dispatch.id === dispatchId ? updatedDispatch : dispatch,
+        ),
+        loading: false,
+      }));
+      return updatedDispatch;
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : String(error),

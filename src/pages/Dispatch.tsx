@@ -73,8 +73,15 @@ const getMethodColor = (method: DispatchMethod) => {
 };
 
 export function DispatchPage() {
-  const { targetDirs, dispatches, loading, fetchTargetDirs, fetchDispatches } =
-    useDispatchStore();
+  const {
+    targetDirs,
+    dispatches,
+    loading,
+    fetchTargetDirs,
+    fetchDispatches,
+    checkDispatchSync,
+    syncDispatchedSkill,
+  } = useDispatchStore();
   const { skills, fetchSkills } = useSkillStore();
 
   useEffect(() => {
@@ -91,6 +98,16 @@ export function DispatchPage() {
   const getTargetDirName = (targetDirId: string) => {
     const dir = targetDirs.find((d) => d.id === targetDirId);
     return dir?.name || "Unknown Directory";
+  };
+
+  const handleSync = async (dispatchId: string) => {
+    try {
+      await checkDispatchSync(dispatchId);
+      await syncDispatchedSkill(dispatchId);
+      await fetchDispatches();
+    } catch (error) {
+      console.error("Failed to sync dispatch:", error);
+    }
   };
 
   return (
@@ -186,8 +203,19 @@ export function DispatchPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" disabled>
-                    <RefreshCw className="h-4 w-4 mr-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      loading ||
+                      dispatch.sync_status === SyncStatus.Conflict ||
+                      dispatch.sync_status === SyncStatus.Error
+                    }
+                    onClick={() => handleSync(dispatch.id)}
+                  >
+                    <RefreshCw
+                      className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`}
+                    />
                     Sync
                   </Button>
                   <Button
