@@ -24,4 +24,17 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  // Vitest 测试配置
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    env: {
+      LLM_API_URL: "https://api.longcat.chat/openai/chat/completions",
+      LLM_API_KEY: "ak_2h10uP76N81N84J9Y78Nx7UA5oG65",
+      LLM_MODEL: "LongCat-Flash-Chat",
+    },
+  },
 });

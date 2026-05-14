@@ -9,9 +9,11 @@ mod git;
 mod skills;
 mod llm;
 mod dispatch;
+#[cfg(test)]
+mod test_utils;
 
 use crate::db::dispatch_template::{DispatchTemplate, CreateDispatchTemplateInput, UpdateDispatchTemplateInput};
-use crate::dispatch::DispatchMethod;
+use crate::db::dispatch::DispatchMethod;
 
 // ------------------------------
 // General Config Commands
@@ -614,7 +616,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             // Create database parent directory if not exists
@@ -624,7 +626,7 @@ fn main() {
             }
             
             // Initialize SQLite pool
-            let db_url = format!("sqlite://{}", db_path.to_string_lossy());
+            let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
             let pool = tauri::async_runtime::block_on(async move {
                 sqlx::sqlite::SqlitePoolOptions::new()
                     .max_connections(5)

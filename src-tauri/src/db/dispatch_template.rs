@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DispatchTemplate {
     pub id: String,
     pub name: String,
@@ -16,7 +16,7 @@ pub struct DispatchTemplate {
 pub struct CreateDispatchTemplateInput {
     pub name: String,
     pub description: Option<String>,
-    pub skill_ids: Vec<String>, // List of skill IDs
+    pub skill_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -26,9 +26,24 @@ pub struct UpdateDispatchTemplateInput {
     pub skill_ids: Option<Vec<String>>,
 }
 
+/// Map a database row to a DispatchTemplate struct
+fn map_row_to_template(row: &sqlx::sqlite::SqliteRow) -> DispatchTemplate {
+    DispatchTemplate {
+        id: row.get("id"),
+        name: row.get("name"),
+        description: row.get("description"),
+        skill_ids: row.get("skill_ids"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    }
+}
+
 impl DispatchTemplate {
     /// Create a new dispatch template
-    pub async fn create(pool: &SqlitePool, input: CreateDispatchTemplateInput) -> Result<Self, sqlx::Error> {
+    pub async fn create(
+        pool: &SqlitePool,
+        input: CreateDispatchTemplateInput,
+    ) -> Result<Self, sqlx::Error> {
         let id = Uuid::new_v4().to_string();
         let skill_ids = serde_json::to_string(&input.skill_ids).map_err(|e| {
             sqlx::Error::Configuration(format!("Failed to serialize skill IDs: {}", e).into())
@@ -36,57 +51,57 @@ impl DispatchTemplate {
 
         let now = chrono::Utc::now();
 
-        let template = sqlx::query_as!(
-            DispatchTemplate,
+        sqlx::query(
             r#"
             INSERT INTO dispatch_templates (id, name, description, skill_ids, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            RETURNING *
             "#,
-            id,
-            input.name,
-            input.description,
-            skill_ids,
-            now,
-            now
         )
-        .fetch_one(pool)
+        .bind(&id)
+        .bind(&input.name)
+        .bind(&input.description)
+        .bind(&skill_ids)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
         .await?;
 
-        Ok(template)
+        let row = sqlx::query("SELECT * FROM dispatch_templates WHERE id = ?")
+            .bind(&id)
+            .fetch_one(pool)
+            .await?;
+
+        Ok(map_row_to_template(&row))
     }
 
     /// Get all dispatch templates
     pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
-        let templates = sqlx::query_as!(
-            DispatchTemplate,
-            r#"
-            SELECT * FROM dispatch_templates ORDER BY created_at DESC
-            "#
-        )
-        .fetch_all(pool)
-        .await?;
+        let rows = sqlx::query("SELECT * FROM dispatch_templates ORDER BY created_at DESC")
+            .fetch_all(pool)
+            .await?;
 
-        Ok(templates)
+        Ok(rows.iter().map(map_row_to_template).collect())
     }
 
     /// Get a dispatch template by ID
-    pub async fn get_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Self>, sqlx::Error> {
-        let template = sqlx::query_as!(
-            DispatchTemplate,
-            r#"
-            SELECT * FROM dispatch_templates WHERE id = ?
-            "#,
-            id
-        )
-        .fetch_optional(pool)
-        .await?;
+    pub async fn get_by_id(
+        pool: &SqlitePool,
+        id: &str,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let row = sqlx::query("SELECT * FROM dispatch_templates WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
 
-        Ok(template)
+        Ok(row.as_ref().map(map_row_to_template))
     }
 
     /// Update a dispatch template
-    pub async fn update(pool: &SqlitePool, id: &str, input: UpdateDispatchTemplateInput) -> Result<Option<Self>, sqlx::Error> {
+    pub async fn update(
+        pool: &SqlitePool,
+        id: &str,
+        input: UpdateDispatchTemplateInput,
+    ) -> Result<Option<Self>, sqlx::Error> {
         let existing = Self::get_by_id(pool, id).await?;
         if existing.is_none() {
             return Ok(None);
@@ -104,36 +119,30 @@ impl DispatchTemplate {
 
         let now = chrono::Utc::now();
 
-        let template = sqlx::query_as!(
-            DispatchTemplate,
+        sqlx::query(
             r#"
             UPDATE dispatch_templates
             SET name = ?, description = ?, skill_ids = ?, updated_at = ?
             WHERE id = ?
-            RETURNING *
             "#,
-            name,
-            description,
-            skill_ids,
-            now,
-            id
         )
-        .fetch_optional(pool)
+        .bind(&name)
+        .bind(&description)
+        .bind(&skill_ids)
+        .bind(now)
+        .bind(id)
+        .execute(pool)
         .await?;
 
-        Ok(template)
+        Self::get_by_id(pool, id).await
     }
 
     /// Delete a dispatch template
     pub async fn delete(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query!(
-            r#"
-            DELETE FROM dispatch_templates WHERE id = ?
-            "#,
-            id
-        )
-        .execute(pool)
-        .await?;
+        let result = sqlx::query("DELETE FROM dispatch_templates WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }

@@ -1,9 +1,9 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::FromRow;
+use sqlx::Row;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, FromRow, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
     pub id: String,
@@ -61,9 +61,44 @@ pub struct UpdateSkill {
     pub status: Option<String>,
 }
 
+/// Map a database row to a Skill struct, handling JSON parsing for tags/dependencies
+pub fn map_row_to_skill(row: &sqlx::sqlite::SqliteRow) -> Result<Skill> {
+    let tags_str: Option<&str> = row.get("tags");
+    let deps_str: Option<&str> = row.get("dependencies");
+
+    let tags: Vec<String> = tags_str
+        .map(serde_json::from_str)
+        .transpose()?
+        .unwrap_or_default();
+
+    let dependencies: Vec<String> = deps_str
+        .map(serde_json::from_str)
+        .transpose()?
+        .unwrap_or_default();
+
+    Ok(Skill {
+        id: row.get("id"),
+        name: row.get("name"),
+        r#type: row.get("type"),
+        source_type: row.get("source_type"),
+        repository_id: row.get("repository_id"),
+        local_path: row.get("local_path"),
+        description: row.get("description"),
+        usage: row.get("usage"),
+        tags,
+        dependencies,
+        llm_analyzed: row.get("llm_analyzed"),
+        quality_score: row.get("quality_score"),
+        status: row.get("status"),
+        first_discovered_at: row.get("first_discovered_at"),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+
 /// Create the skills table if it doesn't exist
 pub async fn create_table(pool: &sqlx::SqlitePool) -> Result<()> {
-    sqlx::query!(
+    sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS skills (
             id TEXT PRIMARY KEY,
@@ -84,7 +119,7 @@ pub async fn create_table(pool: &sqlx::SqlitePool) -> Result<()> {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE
         )
-        "#
+        "#,
     )
     .execute(pool)
     .await?;
@@ -99,7 +134,10 @@ pub async fn create_skill(pool: &sqlx::SqlitePool, create: CreateSkill) -> Resul
 }
 
 /// Bulk create multiple skills (optimized for batch operations)
-pub async fn bulk_create_skills(pool: &sqlx::SqlitePool, creates: Vec<CreateSkill>) -> Result<Vec<Skill>> {
+pub async fn bulk_create_skills(
+    pool: &sqlx::SqlitePool,
+    creates: Vec<CreateSkill>,
+) -> Result<Vec<Skill>> {
     if creates.is_empty() {
         return Ok(Vec::new());
     }
@@ -111,17 +149,15 @@ pub async fn bulk_create_skills(pool: &sqlx::SqlitePool, creates: Vec<CreateSkil
             id, name, type, source_type, repository_id, local_path, description, usage,
             tags, dependencies, llm_analyzed, quality_score, status, first_discovered_at,
             created_at, updated_at
-        ) "
+        ) ",
     );
 
-    // Build VALUES clauses for all skills in the batch
     query_builder.push_values(creates.iter(), |mut b, create| {
         let id = Uuid::new_v4().to_string();
         let llm_analyzed = create.llm_analyzed.unwrap_or(false);
         let tags_json = serde_json::to_string(&create.tags).unwrap_or_default();
         let dependencies_json = serde_json::to_string(&create.dependencies).unwrap_or_default();
 
-        // Store the skill to return later
         skills.push(Skill {
             id: id.clone(),
             name: create.name.clone(),
@@ -159,7 +195,6 @@ pub async fn bulk_create_skills(pool: &sqlx::SqlitePool, creates: Vec<CreateSkil
             .push_bind(now);
     });
 
-    // Execute the bulk insert
     query_builder.build().execute(pool).await?;
 
     Ok(skills)
@@ -167,86 +202,44 @@ pub async fn bulk_create_skills(pool: &sqlx::SqlitePool, creates: Vec<CreateSkil
 
 /// Get a skill by ID
 pub async fn get_skill_by_id(pool: &sqlx::SqlitePool, id: &str) -> Result<Option<Skill>> {
-    let row = sqlx::query!(
-        r#"
-        SELECT * FROM skills WHERE id = ?
-        "#,
-        id
-    )
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query("SELECT * FROM skills WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
 
-    let Some(row) = row else {
-        return Ok(None);
-    };
-
-    let tags: Vec<String> = serde_json::from_str(&row.tags)?;
-    let dependencies: Vec<String> = serde_json::from_str(&row.dependencies)?;
-
-    Ok(Some(Skill {
-        id: row.id,
-        name: row.name,
-        r#type: row.r#type,
-        source_type: row.source_type,
-        repository_id: row.repository_id,
-        local_path: row.local_path,
-        description: row.description,
-        usage: row.usage,
-        tags,
-        dependencies,
-        llm_analyzed: row.llm_analyzed,
-        quality_score: row.quality_score,
-        status: row.status,
-        first_discovered_at: row.first_discovered_at,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-    }))
+    match row {
+        Some(row) => Ok(Some(map_row_to_skill(&row)?)),
+        None => Ok(None),
+    }
 }
 
 /// Get all skills
 pub async fn get_all_skills(pool: &sqlx::SqlitePool) -> Result<Vec<Skill>> {
-    let rows = sqlx::query!(
-        r#"
-        SELECT * FROM skills
-        "#
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query("SELECT * FROM skills")
+        .fetch_all(pool)
+        .await?;
 
-    let mut skills = Vec::with_capacity(rows.len());
-    for row in rows {
-        let tags: Vec<String> = serde_json::from_str(&row.tags)?;
-        let dependencies: Vec<String> = serde_json::from_str(&row.dependencies)?;
-
-        skills.push(Skill {
-            id: row.id,
-            name: row.name,
-            r#type: row.r#type,
-            source_type: row.source_type,
-            repository_id: row.repository_id,
-            local_path: row.local_path,
-            description: row.description,
-            usage: row.usage,
-            tags,
-            dependencies,
-            llm_analyzed: row.llm_analyzed,
-            quality_score: row.quality_score,
-            status: row.status,
-            first_discovered_at: row.first_discovered_at,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        });
-    }
-
-    Ok(skills)
+    rows.iter().map(|r| map_row_to_skill(r)).collect()
 }
 
 /// Update a skill
-pub async fn update_skill(pool: &sqlx::SqlitePool, id: &str, update: UpdateSkill) -> Result<Option<Skill>> {
-    let tags_json = update.tags.as_ref().map(|t| serde_json::to_string(t)).transpose()?;
-    let dependencies_json = update.dependencies.as_ref().map(|d| serde_json::to_string(d)).transpose()?;
+pub async fn update_skill(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    update: UpdateSkill,
+) -> Result<Option<Skill>> {
+    let tags_json = update
+        .tags
+        .as_ref()
+        .map(|t| serde_json::to_string(t))
+        .transpose()?;
+    let dependencies_json = update
+        .dependencies
+        .as_ref()
+        .map(|d| serde_json::to_string(d))
+        .transpose()?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         UPDATE skills
         SET
@@ -265,20 +258,20 @@ pub async fn update_skill(pool: &sqlx::SqlitePool, id: &str, update: UpdateSkill
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         "#,
-        update.name,
-        update.r#type,
-        update.source_type,
-        update.repository_id,
-        update.local_path,
-        update.description,
-        update.usage,
-        tags_json,
-        dependencies_json,
-        update.llm_analyzed,
-        update.quality_score,
-        update.status,
-        id
     )
+    .bind(&update.name)
+    .bind(&update.r#type)
+    .bind(&update.source_type)
+    .bind(&update.repository_id)
+    .bind(&update.local_path)
+    .bind(&update.description)
+    .bind(&update.usage)
+    .bind(tags_json)
+    .bind(dependencies_json)
+    .bind(update.llm_analyzed)
+    .bind(update.quality_score)
+    .bind(&update.status)
+    .bind(id)
     .execute(pool)
     .await?;
 
@@ -287,20 +280,32 @@ pub async fn update_skill(pool: &sqlx::SqlitePool, id: &str, update: UpdateSkill
 
 /// Delete a skill
 pub async fn delete_skill(pool: &sqlx::SqlitePool, id: &str) -> Result<bool> {
-    let result = sqlx::query!(
-        r#"
-        DELETE FROM skills WHERE id = ?
-        "#,
-        id
-    )
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM skills WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
 
     Ok(result.rows_affected() > 0)
 }
 
+/// Get skills by repository ID
+pub async fn get_skills_by_repository(
+    pool: &sqlx::SqlitePool,
+    repository_id: &str,
+) -> Result<Vec<Skill>> {
+    let rows = sqlx::query("SELECT * FROM skills WHERE repository_id = ?")
+        .bind(repository_id)
+        .fetch_all(pool)
+        .await?;
+
+    rows.iter().map(|r| map_row_to_skill(r)).collect()
+}
+
 impl Skill {
-    pub async fn get_by_id(pool: &sqlx::SqlitePool, id: &str) -> Result<Option<Self>, anyhow::Error> {
+    pub async fn get_by_id(
+        pool: &sqlx::SqlitePool,
+        id: &str,
+    ) -> Result<Option<Self>, anyhow::Error> {
         get_skill_by_id(pool, id).await
     }
 
@@ -317,7 +322,7 @@ impl Skill {
         let tags: Vec<String> = serde_json::from_str(tags).unwrap_or_default();
         let dependencies: Vec<String> = serde_json::from_str(dependencies).unwrap_or_default();
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE skills
             SET
@@ -331,14 +336,14 @@ impl Skill {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             "#,
-            skill_type,
-            description,
-            usage,
-            tags,
-            dependencies,
-            quality_score,
-            self.id
         )
+        .bind(skill_type)
+        .bind(description)
+        .bind(usage)
+        .bind(serde_json::to_string(&tags).unwrap_or_default())
+        .bind(serde_json::to_string(&dependencies).unwrap_or_default())
+        .bind(quality_score)
+        .bind(&self.id)
         .execute(pool)
         .await?;
 
@@ -352,5 +357,301 @@ impl Skill {
         self.updated_at = Utc::now();
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::create_test_db;
+
+    #[tokio::test]
+    async fn test_create_skill() {
+        let pool = create_test_db().await.unwrap();
+
+        let create = CreateSkill {
+            name: "Test Skill".to_string(),
+            r#type: "utility".to_string(),
+            source_type: "local".to_string(),
+            repository_id: None,
+            local_path: "/path/to/skill".to_string(),
+            description: Some("A test skill".to_string()),
+            usage: Some("Test usage".to_string()),
+            tags: vec!["test".to_string(), "utility".to_string()],
+            dependencies: vec![],
+            llm_analyzed: Some(false),
+            quality_score: Some(80),
+            status: "active".to_string(),
+        };
+
+        let skill = create_skill(&pool, create).await.unwrap();
+
+        assert_eq!(skill.name, "Test Skill");
+        assert_eq!(skill.r#type, "utility");
+        assert_eq!(skill.source_type, "local");
+        assert_eq!(skill.local_path, "/path/to/skill");
+        assert_eq!(skill.description, Some("A test skill".to_string()));
+        assert_eq!(skill.usage, Some("Test usage".to_string()));
+        assert_eq!(skill.tags, vec!["test", "utility"]);
+        assert_eq!(skill.dependencies, Vec::<String>::new());
+        assert_eq!(skill.llm_analyzed, false);
+        assert_eq!(skill.quality_score, Some(80));
+        assert_eq!(skill.status, "active");
+    }
+
+    #[tokio::test]
+    async fn test_bulk_create_skills() {
+        let pool = create_test_db().await.unwrap();
+
+        let creates = vec![
+            CreateSkill {
+                name: "Test Skill 1".to_string(),
+                r#type: "utility".to_string(),
+                source_type: "local".to_string(),
+                repository_id: None,
+                local_path: "/path/to/skill1".to_string(),
+                description: None,
+                usage: None,
+                tags: vec!["test".to_string()],
+                dependencies: vec![],
+                llm_analyzed: None,
+                quality_score: None,
+                status: "active".to_string(),
+            },
+            CreateSkill {
+                name: "Test Skill 2".to_string(),
+                r#type: "workflow".to_string(),
+                source_type: "git".to_string(),
+                repository_id: None,
+                local_path: "/path/to/skill2".to_string(),
+                description: Some("Second test skill".to_string()),
+                usage: None,
+                tags: vec!["test".to_string(), "workflow".to_string()],
+                dependencies: vec!["skill1".to_string()],
+                llm_analyzed: Some(true),
+                quality_score: Some(90),
+                status: "active".to_string(),
+            },
+        ];
+
+        let skills = bulk_create_skills(&pool, creates).await.unwrap();
+
+        assert_eq!(skills.len(), 2);
+        assert_eq!(skills[0].name, "Test Skill 1");
+        assert_eq!(skills[1].name, "Test Skill 2");
+        assert_eq!(skills[0].llm_analyzed, false);
+        assert_eq!(skills[1].llm_analyzed, true);
+
+        let all_skills = get_all_skills(&pool).await.unwrap();
+        assert_eq!(all_skills.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_bulk_create_empty() {
+        let pool = create_test_db().await.unwrap();
+
+        let skills = bulk_create_skills(&pool, vec![]).await.unwrap();
+        assert!(skills.is_empty());
+
+        let all_skills = get_all_skills(&pool).await.unwrap();
+        assert!(all_skills.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_skill_by_id() {
+        let pool = create_test_db().await.unwrap();
+
+        let create = CreateSkill {
+            name: "Test Skill".to_string(),
+            r#type: "utility".to_string(),
+            source_type: "local".to_string(),
+            repository_id: None,
+            local_path: "/path/to/skill".to_string(),
+            description: None,
+            usage: None,
+            tags: vec![],
+            dependencies: vec![],
+            llm_analyzed: None,
+            quality_score: None,
+            status: "active".to_string(),
+        };
+
+        let skill = create_skill(&pool, create).await.unwrap();
+
+        let found = get_skill_by_id(&pool, &skill.id).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, skill.id);
+
+        let not_found = get_skill_by_id(&pool, "non-existent-id").await.unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_update_skill() {
+        let pool = create_test_db().await.unwrap();
+
+        let create = CreateSkill {
+            name: "Original Name".to_string(),
+            r#type: "utility".to_string(),
+            source_type: "local".to_string(),
+            repository_id: None,
+            local_path: "/original/path".to_string(),
+            description: Some("Original description".to_string()),
+            usage: None,
+            tags: vec!["original".to_string()],
+            dependencies: vec![],
+            llm_analyzed: Some(false),
+            quality_score: Some(70),
+            status: "active".to_string(),
+        };
+
+        let skill = create_skill(&pool, create).await.unwrap();
+
+        let update = UpdateSkill {
+            name: Some("Updated Name".to_string()),
+            r#type: Some("workflow".to_string()),
+            local_path: Some("/updated/path".to_string()),
+            tags: Some(vec!["updated".to_string(), "new".to_string()]),
+            llm_analyzed: Some(true),
+            quality_score: Some(95),
+            status: Some("deprecated".to_string()),
+            source_type: None,
+            repository_id: None,
+            description: None,
+            usage: None,
+            dependencies: None,
+        };
+
+        let updated = update_skill(&pool, &skill.id, update).await.unwrap();
+        assert!(updated.is_some());
+        let updated = updated.unwrap();
+
+        assert_eq!(updated.name, "Updated Name");
+        assert_eq!(updated.r#type, "workflow");
+        assert_eq!(updated.local_path, "/updated/path");
+        assert_eq!(updated.tags, vec!["updated", "new"]);
+        assert_eq!(updated.llm_analyzed, true);
+        assert_eq!(updated.quality_score, Some(95));
+        assert_eq!(updated.status, "deprecated");
+        assert_eq!(updated.source_type, "local");
+        assert_eq!(
+            updated.description,
+            Some("Original description".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_update_nonexistent_skill() {
+        let pool = create_test_db().await.unwrap();
+
+        let update = UpdateSkill {
+            name: Some("Test".to_string()),
+            r#type: None,
+            source_type: None,
+            repository_id: None,
+            local_path: None,
+            description: None,
+            usage: None,
+            tags: None,
+            dependencies: None,
+            llm_analyzed: None,
+            quality_score: None,
+            status: None,
+        };
+
+        let result = update_skill(&pool, "non-existent-id", update)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_skill() {
+        let pool = create_test_db().await.unwrap();
+
+        let create = CreateSkill {
+            name: "Test Skill".to_string(),
+            r#type: "utility".to_string(),
+            source_type: "local".to_string(),
+            repository_id: None,
+            local_path: "/path/to/skill".to_string(),
+            description: None,
+            usage: None,
+            tags: vec![],
+            dependencies: vec![],
+            llm_analyzed: None,
+            quality_score: None,
+            status: "active".to_string(),
+        };
+
+        let skill = create_skill(&pool, create).await.unwrap();
+
+        let delete_result = delete_skill(&pool, &skill.id).await.unwrap();
+        assert!(delete_result);
+
+        let found = get_skill_by_id(&pool, &skill.id).await.unwrap();
+        assert!(found.is_none());
+
+        let delete_result = delete_skill(&pool, "non-existent-id")
+            .await
+            .unwrap();
+        assert!(!delete_result);
+    }
+
+    #[tokio::test]
+    async fn test_skill_update_analysis() {
+        let pool = create_test_db().await.unwrap();
+
+        let create = CreateSkill {
+            name: "Test Skill".to_string(),
+            r#type: "unknown".to_string(),
+            source_type: "local".to_string(),
+            repository_id: None,
+            local_path: "/path/to/skill".to_string(),
+            description: None,
+            usage: None,
+            tags: vec![],
+            dependencies: vec![],
+            llm_analyzed: Some(false),
+            quality_score: None,
+            status: "active".to_string(),
+        };
+
+        let mut skill = create_skill(&pool, create).await.unwrap();
+
+        skill
+            .update_analysis(
+                &pool,
+                "utility",
+                "Updated description from analysis",
+                "Updated usage instructions",
+                "[\"analyzed\", \"utility\"]",
+                "[\"dep1\", \"dep2\"]",
+                92,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(skill.r#type, "utility");
+        assert_eq!(
+            skill.description,
+            Some("Updated description from analysis".to_string())
+        );
+        assert_eq!(
+            skill.usage,
+            Some("Updated usage instructions".to_string())
+        );
+        assert_eq!(skill.tags, vec!["analyzed", "utility"]);
+        assert_eq!(skill.dependencies, vec!["dep1", "dep2"]);
+        assert_eq!(skill.llm_analyzed, true);
+        assert_eq!(skill.quality_score, Some(92));
+
+        let found = get_skill_by_id(&pool, &skill.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.r#type, "utility");
+        assert_eq!(found.llm_analyzed, true);
+        assert_eq!(found.quality_score, Some(92));
     }
 }

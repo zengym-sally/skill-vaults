@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 use serde::{Serialize, Deserialize};
 
 use crate::db::skill::{Skill, CreateSkill};
@@ -101,15 +101,14 @@ async fn scan_repository(
     // Pre-fetch existing skill paths for this repository to avoid per-file queries
     let mut existing_paths = std::collections::HashSet::new();
     if !force {
-        let existing = sqlx::query!(
-            "SELECT local_path FROM skills WHERE repository_id = ?",
-            repo.id
-        )
-        .fetch_all(pool)
-        .await?;
-        
+        let existing = sqlx::query("SELECT local_path FROM skills WHERE repository_id = ?")
+            .bind(&repo.id)
+            .fetch_all(pool)
+            .await?;
+
         for row in existing {
-            existing_paths.insert(row.local_path);
+            let path: String = row.get("local_path");
+            existing_paths.insert(path);
         }
     }
     

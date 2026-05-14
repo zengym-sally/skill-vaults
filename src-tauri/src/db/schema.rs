@@ -23,25 +23,21 @@ CREATE TABLE IF NOT EXISTS repositories (
 CREATE TABLE IF NOT EXISTS skills (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    description TEXT,
-    repository_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    version TEXT,
-    author TEXT,
     type TEXT NOT NULL,
     source_type TEXT NOT NULL,
+    repository_id TEXT,
     local_path TEXT NOT NULL,
+    description TEXT,
     usage TEXT,
-    tags TEXT,
-    dependencies TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    dependencies TEXT NOT NULL DEFAULT '[]',
     llm_analyzed BOOLEAN NOT NULL DEFAULT 0,
     quality_score INTEGER,
     status TEXT NOT NULL,
     first_discovered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
-    UNIQUE(repository_id, path)
+    FOREIGN KEY (repository_id) REFERENCES repositories(id) ON DELETE CASCADE
 );
 
 -- Create dispatch table

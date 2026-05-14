@@ -1,6 +1,6 @@
 //! Git 认证处理模块
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use git2::Cred;
 use serde::Deserialize;
 

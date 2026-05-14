@@ -1,10 +1,8 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use anyhow::Result;
 use serde::{Serialize, Deserialize};
 use sqlx::SqlitePool;
 use tauri::State;
-use tokio::sync::Semaphore;
 
 use crate::db::dispatch::{Dispatch, DispatchMethod, SyncStatus};
 use crate::db::skill::Skill;
@@ -124,13 +122,13 @@ pub async fn bulk_dispatch(
     dispatch_method: DispatchMethod,
     pool: State<'_, SqlitePool>,
 ) -> Result<BulkDispatchResult, String> {
-    let mut result = BulkDispatchResult {
+    let mut bulk_result = BulkDispatchResult {
         successful: Vec::new(),
         errors: Vec::new(),
     };
 
     if skill_ids.is_empty() {
-        return Ok(result);
+        return Ok(bulk_result);
     }
 
     // Get target directory once (common for all dispatches)
@@ -146,67 +144,39 @@ pub async fn bulk_dispatch(
     // Pre-fetch all skills in one query to avoid N+1 database calls
     let placeholders = std::iter::repeat("?").take(skill_ids.len()).collect::<Vec<_>>().join(",");
     let query = format!("SELECT * FROM skills WHERE id IN ({})", placeholders);
-    
-    let mut query_builder = sqlx::query_as::<_, Skill>(&query);
+
+    let mut query_builder = sqlx::query(&query);
     for skill_id in &skill_ids {
         query_builder = query_builder.bind(skill_id);
     }
-    
-    let skills = query_builder.fetch_all(&*pool)
+
+    let rows = query_builder.fetch_all(&*pool)
         .await
         .map_err(|e| format!("Failed to fetch skills: {}", e))?;
-    
-    // Create a map of skill id to skill for quick lookup
+
+    let skills: Vec<Skill> = rows.iter()
+        .filter_map(|r| crate::db::skill::map_row_to_skill(r).ok())
+        .collect();
+
     let skill_map: std::collections::HashMap<_, _> = skills.into_iter().map(|s| (s.id.clone(), s)).collect();
 
-    // Limit concurrent operations to prevent system overload (too many open files, etc.)
-    const MAX_CONCURRENT: usize = 10;
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
-    let mut tasks = Vec::with_capacity(skill_ids.len());
-
-    // Spawn a task for each skill dispatch
+    // Process dispatches sequentially to avoid concurrency issues
     for skill_id in skill_ids {
-        let semaphore = Arc::clone(&semaphore);
-        let target_dir = target_dir.clone();
-        let pool = pool.clone();
-        let skill = skill_map.get(&skill_id).cloned();
-
-        let task = tokio::spawn(async move {
-            // Acquire permit from semaphore before processing
-            let _permit = semaphore.acquire().await.map_err(|e| e.to_string())?;
-
-            match skill {
-                Some(skill) => {
-                    // Process the dispatch with the pre-fetched skill
-                    process_single_dispatch_with_skill(&skill, &target_dir, dispatch_method, &pool).await
-                }
-                None => {
-                    Err(format!("Skill with id {} not found", skill_id))
-                }
+        let skill = match skill_map.get(&skill_id) {
+            Some(s) => s.clone(),
+            None => {
+                bulk_result.errors.push((skill_id.clone(), format!("Skill with id {} not found", skill_id)));
+                continue;
             }
-            .map(|dispatch| (skill_id, Ok(dispatch)))
-            .unwrap_or_else(|e| (skill_id, Err(e)))
-        });
+        };
 
-        tasks.push(task);
-    }
-
-    // Wait for all tasks to complete and collect results
-    for task in tasks {
-        match task.await {
-            Ok((skill_id, result)) => {
-                match result {
-                    Ok(dispatch) => result.successful.push(dispatch),
-                    Err(e) => result.errors.push((skill_id, e)),
-                }
-            }
-            Err(e) => {
-                result.errors.push(("unknown".to_string(), format!("Task failed: {}", e)));
-            }
+        match process_single_dispatch_with_skill(&skill, &target_dir, dispatch_method, &pool).await {
+            Ok(dispatch) => bulk_result.successful.push(dispatch),
+            Err(e) => bulk_result.errors.push((skill_id, e)),
         }
     }
 
-    Ok(result)
+    Ok(bulk_result)
 }
 
 /// Helper function to process a single dispatch with pre-fetched skill

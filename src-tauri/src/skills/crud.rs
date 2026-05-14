@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 use crate::db::skill::{Skill, UpdateSkill};
 
@@ -30,40 +30,55 @@ pub async fn list_skills(
         source_type: None,
     });
 
-    // Start with base query
-    let mut query = "SELECT * FROM skills WHERE 1=1".to_string();
-    let mut params: Vec<&dyn sqlx::Encode<'_, sqlx::Sqlite>> = Vec::new();
+    // Build query with filters using separate bind calls
+    let mut conditions = Vec::new();
+    let mut search_param: Option<String> = None;
+    let mut type_param: Option<String> = None;
+    let mut status_param: Option<String> = None;
+    let mut source_type_param: Option<String> = None;
 
-    // Add filters
     if let Some(search) = &options.search {
-        query.push_str(" AND (name LIKE ? OR description LIKE ? OR tags LIKE ?)");
-        let search_pattern = format!("%{}%", search);
-        params.push(&search_pattern);
-        params.push(&search_pattern);
-        params.push(&search_pattern);
+        conditions.push("(name LIKE ? OR description LIKE ? OR tags LIKE ?)");
+        search_param = Some(format!("%{}%", search));
     }
 
-    if let Some(skill_type) = &options.r#type {
-        query.push_str(" AND type = ?");
-        params.push(skill_type);
+    if options.r#type.is_some() {
+        conditions.push("type = ?");
+        type_param = options.r#type.clone();
     }
 
-    if let Some(status) = &options.status {
-        query.push_str(" AND status = ?");
-        params.push(status);
+    if options.status.is_some() {
+        conditions.push("status = ?");
+        status_param = options.status.clone();
     }
 
-    if let Some(source_type) = &options.source_type {
-        query.push_str(" AND source_type = ?");
-        params.push(source_type);
+    if options.source_type.is_some() {
+        conditions.push("source_type = ?");
+        source_type_param = options.source_type.clone();
     }
 
-    query.push_str(" ORDER BY name ASC");
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {}", conditions.join(" AND "))
+    };
 
-    // Execute query
+    let query = format!("SELECT * FROM skills WHERE 1=1{} ORDER BY name ASC", where_clause);
+
+    // Bind parameters in order
     let mut query_builder = sqlx::query(&query);
-    for param in params {
-        query_builder = query_builder.bind(param);
+
+    if let Some(ref search) = search_param {
+        query_builder = query_builder.bind(search).bind(search).bind(search);
+    }
+    if let Some(ref t) = type_param {
+        query_builder = query_builder.bind(t);
+    }
+    if let Some(ref s) = status_param {
+        query_builder = query_builder.bind(s);
+    }
+    if let Some(ref st) = source_type_param {
+        query_builder = query_builder.bind(st);
     }
 
     let rows = query_builder
