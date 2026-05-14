@@ -322,7 +322,8 @@ fn main() {
             skills::analyzer::analyze_skill,
             dispatch::add_target_dir,
             dispatch::list_target_dirs,
-            dispatch::delete_target_dir
+            dispatch::delete_target_dir,
+            dispatch::dispatch_skill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
