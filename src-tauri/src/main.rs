@@ -330,6 +330,36 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+/// Export database backup
+#[tauri::command]
+fn export_db(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let db_path = crate::db::get_db_path(&app_handle);
+    if !db_path.exists() {
+        return Err("Database file not found".to_string());
+    }
+    Ok(db_path.to_string_lossy().to_string())
+}
+
+/// Import database backup
+#[tauri::command]
+fn import_db(app_handle: tauri::AppHandle, backup_path: &str) -> Result<(), String> {
+    use std::fs;
+    use std::path::Path;
+    
+    let backup_path = Path::new(backup_path);
+    if !backup_path.exists() || !backup_path.is_file() {
+        return Err("Invalid backup file".to_string());
+    }
+    
+    let db_path = crate::db::get_db_path(&app_handle);
+    
+    // Copy backup file to overwrite current database
+    fs::copy(backup_path, &db_path)
+        .map_err(|e| format!("Failed to import database: {}", e))?;
+    
+    Ok(())
+}
+
 /// 添加仓库
 #[tauri::command]
 async fn add_repository(
@@ -617,6 +647,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            export_db,
+            import_db,
             config::base_path::get_base_path_command,
             config::base_path::set_base_path_command,
             config::base_path::init_base_directory_command,

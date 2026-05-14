@@ -51,6 +51,8 @@ export function SettingsPage() {
     saveSyncConfig,
     loadThemeConfig,
     saveThemeConfig,
+    exportDatabase,
+    importDatabase,
   } = useSettingsStore();
   const [llmFormData, setLlmFormData] = useState<LLMConfig>({
     apiKey: "",
@@ -145,6 +147,26 @@ export function SettingsPage() {
       toast.error(
         `Failed to save Theme & Language configuration: ${(error as Error).message}`,
       );
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      await exportDatabase();
+      toast.success("Backup created successfully");
+    } catch (error) {
+      toast.error(`Failed to create backup: ${(error as Error).message}`);
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      await importDatabase();
+      toast.success(
+        "Backup restored successfully. Please restart the application for changes to take effect.",
+      );
+    } catch (error) {
+      toast.error(`Failed to restore backup: ${(error as Error).message}`);
     }
   };
 
@@ -456,17 +478,23 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-3">
-              <Button>
+              <Button onClick={handleExport} disabled={isLoading}>
                 <Download className="mr-2 h-4 w-4" />
-                Create Backup
+                {isLoading ? "Exporting..." : "Create Backup"}
               </Button>
-              <Button variant="outline">
+              <Button
+                variant="outline"
+                onClick={handleImport}
+                disabled={isLoading}
+              >
                 <Upload className="mr-2 h-4 w-4" />
-                Restore Backup
+                {isLoading ? "Importing..." : "Restore Backup"}
               </Button>
             </div>
             <p className="text-sm text-gray-500">
-              Full backup and restore functionality coming soon.
+              Backup contains your full skill library, configurations and
+              repository settings. After restoring, you will need to restart the
+              application.
             </p>
           </CardContent>
         </Card>

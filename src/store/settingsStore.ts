@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { copyFile } from "@tauri-apps/plugin-fs";
 import { LLMConfig } from "../types/llm";
 import { GitConfig } from "../types/git";
 
@@ -28,6 +30,8 @@ interface SettingsState {
   saveSyncConfig: (config: SyncConfig) => Promise<void>;
   loadThemeConfig: () => Promise<void>;
   saveThemeConfig: (config: ThemeConfig) => Promise<void>;
+  exportDatabase: () => Promise<void>;
+  importDatabase: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -221,6 +225,71 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       root.classList.add(config.theme);
 
       set({ themeConfig: config });
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  exportDatabase: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      // Get database path from backend
+      const dbPath = await invoke<string>("export_db");
+
+      // Generate default backup filename with date
+      const date = new Date().toISOString().split("T")[0].replace(/-/g, "");
+      const defaultFileName = `skillvault-backup-${date}.db`;
+
+      // Let user select save location
+      const savePath = await save({
+        defaultPath: defaultFileName,
+        filters: [
+          {
+            name: "Database Files",
+            extensions: ["db"],
+          },
+        ],
+      });
+
+      if (!savePath) {
+        // User canceled save dialog
+        return;
+      }
+
+      // Copy database file to user selected location
+      await copyFile(dbPath, savePath);
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  importDatabase: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      // Let user select backup file
+      const selectedPath = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "Database Files",
+            extensions: ["db"],
+          },
+        ],
+      });
+
+      if (!selectedPath || Array.isArray(selectedPath)) {
+        // User canceled or selected multiple files
+        return;
+      }
+
+      // Call backend import command
+      await invoke("import_db", { backupPath: selectedPath });
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
