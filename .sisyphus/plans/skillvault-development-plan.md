@@ -106,7 +106,7 @@ src-tauri/src/
 | 任务 ID | 任务描述                                      | 依赖       | 优先级 |
 | ------- | --------------------------------------------- | ---------- | ------ |
 | T101    | ✅ 初始化 Tauri 2.x + React + TypeScript 项目 | -          | 高     |
-| T102    | 配置 Tailwind CSS + Shadcn/ui 组件库          | T101       | 高     |
+| T102    | ✅ 配置 Tailwind CSS + Shadcn/ui 组件库       | T101       | 高     |
 | T103    | 配置 SQLite 数据库插件 (tauri-plugin-sql)     | T101       | 高     |
 | T104    | 配置文件系统、对话框、更新等 Tauri 插件       | T101       | 中     |
 | T105    | 实现基础目录结构创建逻辑                      | T104       | 高     |
