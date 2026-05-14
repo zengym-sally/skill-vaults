@@ -6,6 +6,7 @@ use tauri::Manager;
 mod db;
 mod config;
 mod git;
+mod skills;
 
 use std::path::Path;
 use std::fs;
@@ -311,7 +312,8 @@ fn main() {
             get_repository,
             delete_repository,
             sync_repository,
-            sync_all_repositories
+            sync_all_repositories,
+            skills::discovery::discover_skills
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
