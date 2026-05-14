@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { Skill, UpdateSkill } from "../types/skill";
 
 interface SkillStore {
@@ -55,10 +56,12 @@ export const useSkillStore = create<SkillStore>((set, get) => ({
       });
       set({ skills, loading: false });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       set({
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         loading: false,
       });
+      toast.error(message);
     }
   },
 
@@ -68,10 +71,12 @@ export const useSkillStore = create<SkillStore>((set, get) => ({
       await invoke("update_skill_command", { id, update });
       await get().fetchSkills();
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       set({
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         loading: false,
       });
+      toast.error(message);
       throw error;
     }
   },
@@ -85,10 +90,12 @@ export const useSkillStore = create<SkillStore>((set, get) => ({
         loading: false,
       }));
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       set({
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         loading: false,
       });
+      toast.error(message);
       throw error;
     }
   },
@@ -99,10 +106,12 @@ export const useSkillStore = create<SkillStore>((set, get) => ({
       await invoke("discover_skills", { options });
       await get().fetchSkills();
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       set({
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         loading: false,
       });
+      toast.error(message);
       throw error;
     }
   },

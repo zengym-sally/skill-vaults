@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, Component, ErrorInfo, ReactNode } from "react";
 import {
   HashRouter,
   Routes,
@@ -17,8 +17,59 @@ import {
   BookOpen,
   Send,
   Settings as SettingsIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+    toast.error(`应用发生错误: ${error.message}`);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              哎呀，出问题了
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
+              {this.state.error?.message || "应用遇到了一个意外错误。"}
+            </p>
+            <Button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="w-full"
+            >
+              刷新页面
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function Navigation() {
   useLocation();
@@ -103,9 +154,11 @@ function AppContent() {
 
 function App() {
   return (
-    <HashRouter>
-      <AppContent />
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <AppContent />
+      </HashRouter>
+    </ErrorBoundary>
   );
 }
 

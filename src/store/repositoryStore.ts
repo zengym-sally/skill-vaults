@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { Repository, CreateRepositoryRequest } from "../types/repository";
 
 interface RepositoryState {
@@ -26,7 +27,9 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
       const repositories = await invoke<Repository[]>("list_repositories");
       set({ repositories, loading: false });
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      const message = (error as Error).message;
+      set({ error: message, loading: false });
+      toast.error(message);
       throw error;
     }
   },
@@ -40,7 +43,9 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
       set({ loading: false });
       return repository;
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      const message = (error as Error).message;
+      set({ error: message, loading: false });
+      toast.error(message);
       throw error;
     }
   },
