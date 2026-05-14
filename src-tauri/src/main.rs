@@ -170,6 +170,53 @@ async fn save_git_config(
 }
 
 // ------------------------------
+// Sync Config Commands
+// ------------------------------
+
+/// Get Sync configuration
+#[tauri::command]
+async fn get_sync_config(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<serde_json::Value, String> {
+    use crate::db::config::Config;
+    
+    let auto_sync_enabled = Config::get(&pool, "sync.auto_sync_enabled")
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let sync_interval = Config::get(&pool, "sync.sync_interval")
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(serde_json::json!({
+        "autoSyncEnabled": auto_sync_enabled.map(|v| v == "true").unwrap_or(false),
+        "syncInterval": sync_interval.unwrap_or("daily".to_string())
+    }))
+}
+
+/// Save Sync configuration
+#[tauri::command]
+async fn save_sync_config(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+    auto_sync_enabled: bool,
+    sync_interval: &str,
+) -> Result<(), String> {
+    use crate::db::config::Config;
+    
+    // Save auto sync enabled
+    Config::set(&pool, "sync.auto_sync_enabled", &auto_sync_enabled.to_string())
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    // Save sync interval
+    Config::set(&pool, "sync.sync_interval", sync_interval)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+// ------------------------------
 // Dispatch Template Commands
 // ------------------------------
 
@@ -580,6 +627,8 @@ fn main() {
             save_llm_config,
             get_git_config,
             save_git_config,
+            get_sync_config,
+            save_sync_config,
             add_repository,
             list_repositories,
             get_repository,

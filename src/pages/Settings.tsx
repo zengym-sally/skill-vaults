@@ -27,7 +27,7 @@ import {
   Upload,
   Save,
 } from "lucide-react";
-import { useSettingsStore } from "@/store/settingsStore";
+import { useSettingsStore, SyncConfig } from "@/store/settingsStore";
 import { LLMConfig } from "@/types/llm";
 import { GitConfig } from "@/types/git";
 
@@ -35,11 +35,14 @@ export function SettingsPage() {
   const {
     llmConfig,
     gitConfig,
+    syncConfig,
     isLoading,
     loadLLMConfig,
     saveLLMConfig,
     loadGitConfig,
     saveGitConfig,
+    loadSyncConfig,
+    saveSyncConfig,
   } = useSettingsStore();
   const [llmFormData, setLlmFormData] = useState<LLMConfig>({
     apiKey: "",
@@ -51,11 +54,16 @@ export function SettingsPage() {
     email: "",
     sshKeyPath: "",
   });
+  const [syncFormData, setSyncFormData] = useState<SyncConfig>({
+    autoSyncEnabled: false,
+    syncInterval: "daily",
+  });
 
   useEffect(() => {
     loadLLMConfig();
     loadGitConfig();
-  }, [loadLLMConfig, loadGitConfig]);
+    loadSyncConfig();
+  }, [loadLLMConfig, loadGitConfig, loadSyncConfig]);
 
   useEffect(() => {
     if (llmConfig) {
@@ -68,6 +76,12 @@ export function SettingsPage() {
       setGitFormData(gitConfig);
     }
   }, [gitConfig]);
+
+  useEffect(() => {
+    if (syncConfig) {
+      setSyncFormData(syncConfig);
+    }
+  }, [syncConfig]);
 
   const handleLlmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +101,18 @@ export function SettingsPage() {
     } catch (error) {
       toast.error(
         `Failed to save Git configuration: ${(error as Error).message}`,
+      );
+    }
+  };
+
+  const handleSyncSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await saveSyncConfig(syncFormData);
+      toast.success("Sync configuration saved successfully");
+    } catch (error) {
+      toast.error(
+        `Failed to save Sync configuration: ${(error as Error).message}`,
       );
     }
   };
@@ -271,9 +297,59 @@ export function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-500">
-              Sync strategy settings will be available here in a future update.
-            </p>
+            <form onSubmit={handleSyncSubmit} className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="auto-sync">Auto Sync</Label>
+                  <p className="text-sm text-gray-500">
+                    Automatically sync all repositories on a schedule
+                  </p>
+                </div>
+                <Input
+                  id="auto-sync"
+                  type="checkbox"
+                  checked={syncFormData.autoSyncEnabled}
+                  onChange={(e) =>
+                    setSyncFormData({
+                      ...syncFormData,
+                      autoSyncEnabled: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5"
+                />
+              </div>
+
+              {syncFormData.autoSyncEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="sync-interval">Sync Interval</Label>
+                  <Select
+                    value={syncFormData.syncInterval}
+                    onValueChange={(
+                      value: "daily" | "weekly" | "monthly" | "never",
+                    ) =>
+                      setSyncFormData({ ...syncFormData, syncInterval: value })
+                    }
+                  >
+                    <SelectTrigger id="sync-interval">
+                      <SelectValue placeholder="Select interval" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    How often to automatically sync all repositories
+                  </p>
+                </div>
+              )}
+
+              <Button type="submit" disabled={isLoading}>
+                <Save className="mr-2 h-4 w-4" />
+                {isLoading ? "Saving..." : "Save Sync Configuration"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 

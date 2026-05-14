@@ -3,20 +3,29 @@ import { invoke } from "@tauri-apps/api/core";
 import { LLMConfig } from "../types/llm";
 import { GitConfig } from "../types/git";
 
+export interface SyncConfig {
+  autoSyncEnabled: boolean;
+  syncInterval: "daily" | "weekly" | "monthly" | "never";
+}
+
 interface SettingsState {
   llmConfig: LLMConfig | null;
   gitConfig: GitConfig | null;
+  syncConfig: SyncConfig | null;
   isLoading: boolean;
   error: string | null;
   loadLLMConfig: () => Promise<void>;
   saveLLMConfig: (config: LLMConfig) => Promise<void>;
   loadGitConfig: () => Promise<void>;
   saveGitConfig: (config: GitConfig) => Promise<void>;
+  loadSyncConfig: () => Promise<void>;
+  saveSyncConfig: (config: SyncConfig) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   llmConfig: null,
   gitConfig: null,
+  syncConfig: null,
   isLoading: false,
   error: null,
 
@@ -111,6 +120,44 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       });
 
       set({ gitConfig: config });
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  loadSyncConfig: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const config = await invoke<{
+        autoSyncEnabled: boolean;
+        syncInterval: "daily" | "weekly" | "monthly" | "never";
+      }>("get_sync_config");
+
+      set({
+        syncConfig: {
+          autoSyncEnabled: config.autoSyncEnabled,
+          syncInterval: config.syncInterval,
+        },
+      });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  saveSyncConfig: async (config: SyncConfig) => {
+    set({ isLoading: true, error: null });
+    try {
+      await invoke("save_sync_config", {
+        autoSyncEnabled: config.autoSyncEnabled,
+        syncInterval: config.syncInterval,
+      });
+
+      set({ syncConfig: config });
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
