@@ -6,8 +6,9 @@ use tauri::State;
 use crate::db::dispatch::{Dispatch, DispatchMethod, SyncStatus};
 use crate::db::skill::Skill;
 use super::target_dir::TargetDir;
+use super::copy::copy_dir;
 
-/// Create a symbolic link from skill to target directory
+/// Dispatch a skill to target directory using specified method
 #[tauri::command]
 pub async fn dispatch_skill(
     skill_id: &str,
@@ -15,11 +16,6 @@ pub async fn dispatch_skill(
     dispatch_method: DispatchMethod,
     pool: State<'_, SqlitePool>,
 ) -> Result<Dispatch, String> {
-    // Only support symlink for now
-    if dispatch_method != DispatchMethod::Symlink {
-        return Err("Only symlink dispatch method is supported currently".to_string());
-    }
-
     // Get skill by ID
     let skill = Skill::get_by_id(&pool, skill_id)
         .await
@@ -56,17 +52,29 @@ pub async fn dispatch_skill(
             .map_err(|e| format!("Failed to create parent directories: {}", e))?;
     }
 
-    // Create symbolic link
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&source_path, &dest_path)
-            .map_err(|e| format!("Failed to create symbolic link: {}", e))?;
-    }
+    // Perform dispatch based on method
+    match dispatch_method {
+        DispatchMethod::Symlink => {
+            // Create symbolic link
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&source_path, &dest_path)
+                    .map_err(|e| format!("Failed to create symbolic link: {}", e))?;
+            }
 
-    #[cfg(windows)]
-    {
-        std::os::windows::fs::symlink_dir(&source_path, &dest_path)
-            .map_err(|e| format!("Failed to create symbolic link: {}", e))?;
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_dir(&source_path, &dest_path)
+                    .map_err(|e| format!("Failed to create symbolic link: {}", e))?;
+            }
+        }
+        DispatchMethod::Copy => {
+            // Recursively copy directory
+            copy_dir(&source_path, &dest_path)?;
+        }
+        DispatchMethod::Hardlink => {
+            return Err("Hardlink dispatch method is not supported yet".to_string());
+        }
     }
 
     // Create dispatch record
@@ -75,7 +83,7 @@ pub async fn dispatch_skill(
         &pool,
         target_dir.id.clone(),
         skill.id.clone(),
-        DispatchMethod::Symlink,
+        dispatch_method,
         source_path.to_string_lossy().to_string(),
         dest_path.to_string_lossy().to_string(),
         SyncStatus::Synced,
