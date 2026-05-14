@@ -25,3 +25,19 @@ export interface Dispatch {
   created_at: string;
   updated_at: string;
 }
+
+export interface TargetDir {
+  id: string;
+  name: string;
+  path: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTargetDir {
+  [key: string]: unknown;
+  name: string;
+  path: string;
+  description?: string | null;
+}

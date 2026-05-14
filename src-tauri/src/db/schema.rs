@@ -69,9 +69,20 @@ CREATE TABLE IF NOT EXISTS config (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create target_dirs table
+CREATE TABLE IF NOT EXISTS target_dirs (
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_skills_repository_id ON skills(repository_id);
 CREATE INDEX IF NOT EXISTS idx_dispatch_skill_id ON dispatch(skill_id);
 CREATE INDEX IF NOT EXISTS idx_dispatch_target_dir ON dispatch(target_dir);
 CREATE INDEX IF NOT EXISTS idx_dispatch_sync_status ON dispatch(sync_status);
+CREATE INDEX IF NOT EXISTS idx_target_dirs_path ON target_dirs(path);
 "#;

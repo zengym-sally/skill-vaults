@@ -8,6 +8,7 @@ mod config;
 mod git;
 mod skills;
 mod llm;
+mod dispatch;
 
 use std::path::Path;
 use std::fs;
@@ -318,7 +319,10 @@ fn main() {
             skills::crud::list_skills,
             skills::crud::update_skill_command,
             skills::crud::delete_skill_command,
-            skills::analyzer::analyze_skill
+            skills::analyzer::analyze_skill,
+            dispatch::add_target_dir,
+            dispatch::list_target_dirs,
+            dispatch::delete_target_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
