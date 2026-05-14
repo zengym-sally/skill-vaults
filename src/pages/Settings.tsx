@@ -407,17 +407,15 @@ export function SettingsPage() {
                     Automatically sync all repositories on a schedule
                   </p>
                 </div>
-                <Input
+                <Switch
                   id="auto-sync"
-                  type="checkbox"
                   checked={syncFormData.autoSyncEnabled}
-                  onChange={(e) =>
+                  onCheckedChange={(checked) =>
                     setSyncFormData({
                       ...syncFormData,
-                      autoSyncEnabled: e.target.checked,
+                      autoSyncEnabled: checked,
                     })
                   }
-                  className="w-5 h-5"
                 />
               </div>
 
