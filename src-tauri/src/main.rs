@@ -313,7 +313,10 @@ fn main() {
             delete_repository,
             sync_repository,
             sync_all_repositories,
-            skills::discovery::discover_skills
+            skills::discovery::discover_skills,
+            skills::crud::list_skills,
+            skills::crud::update_skill_command,
+            skills::crud::delete_skill_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
