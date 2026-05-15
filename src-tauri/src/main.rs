@@ -319,6 +319,20 @@ async fn sync_all_repositories(
     Ok(updated_repos)
 }
 
+#[tauri::command]
+async fn get_repository_skill_counts(
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<std::collections::HashMap<String, i64>, String> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT repository_id, COUNT(*) as count FROM skills WHERE repository_id IS NOT NULL GROUP BY repository_id"
+    )
+    .fetch_all(&*pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(rows.into_iter().collect())
+}
+
 // ------------------------------
 // Dispatch Template Commands
 // ------------------------------
@@ -457,6 +471,7 @@ fn main() {
             delete_repository,
             sync_repository,
             sync_all_repositories,
+            get_repository_skill_counts,
             // Skills
             skills::discovery::discover_skills,
             skills::crud::list_skills,
