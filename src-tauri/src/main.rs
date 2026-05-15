@@ -155,6 +155,7 @@ async fn add_repository(
 
         let repo = db::repository::Repository::create(
             &pool, name, Some(url), path, source_type, local_path_str, "syncing", skills_path,
+            auth_type, auth_config, branch,
         ).await.map_err(|e| e.to_string())?;
 
         // Clone in background
@@ -213,6 +214,7 @@ async fn add_repository(
 
         let repo = db::repository::Repository::create(
             &pool, name, None, path, source_type, local_path_str, "syncing", skills_path,
+            None, None, None,
         ).await.map_err(|e| e.to_string())?;
 
         // Copy/symlink in background
@@ -362,59 +364,65 @@ async fn sync_repository(
         .await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Repository not found".to_string())?;
 
-    if repo.source_type == "local" {
-        let source_path = std::path::Path::new(&repo.path);
-        let local_path = std::path::Path::new(&repo.local_path);
+    // Set syncing status immediately
+    repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
 
-        repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
+    let repo_id = repo.id.clone();
+    let pool_clone = pool.inner().clone();
 
-        match dispatch::copy::copy_dir(source_path, local_path) {
-            Ok(_) => {
-                repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
-                let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
-            }
-            Err(e) => {
-                repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e)).await.map_err(|e| e.to_string())?;
-                return Err(e);
-            }
-        }
-    } else if repo.url.is_some() {
-        let local_path = std::path::Path::new(&repo.local_path);
-        repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let result = async {
+                let fresh_repo = db::repository::Repository::get_by_id(&pool_clone, &repo_id)
+                    .await.map_err(|e| e.to_string())?
+                    .ok_or_else(|| "Repository not found".to_string())?;
 
-        if !local_path.exists() {
-            // Directory missing (clone failed previously) — re-clone
-            let url = repo.url.as_deref().unwrap();
-            let branch = repo.branch.as_deref().unwrap_or("main");
-            let auth_type = repo.auth_type.as_deref().unwrap_or("none");
-            let auth_config = repo.auth_config.as_deref().unwrap_or("{}");
+                if fresh_repo.source_type == "local" {
+                    let source_path = std::path::Path::new(&fresh_repo.path);
+                    let local_path = std::path::Path::new(&fresh_repo.local_path);
+                    dispatch::copy::copy_dir(source_path, local_path)
+                        .map_err(|e| e.to_string())?;
+                } else if fresh_repo.url.is_some() {
+                    let local_path = std::path::Path::new(&fresh_repo.local_path);
+                    if !local_path.exists() {
+                        let url = fresh_repo.url.as_deref().unwrap();
+                        let branch = fresh_repo.branch.as_deref().unwrap_or("main");
+                        let auth_type = fresh_repo.auth_type.as_deref().unwrap_or("none");
+                        let auth_config = fresh_repo.auth_config.as_deref().unwrap_or("{}");
+                        git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
+                            .map_err(|e| e.to_string())?;
+                    } else {
+                        git::sync_repository(&fresh_repo).await
+                            .map_err(|e| e.to_string())?;
+                    }
+                }
 
-            match git::clone_repository(url, &repo.local_path, branch, auth_type, auth_config).await {
+                Ok::<(), String>(())
+            }.await;
+
+            match result {
                 Ok(_) => {
-                    repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
-                    let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+                    let _ = sqlx::query("UPDATE repositories SET status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = ?1")
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
+                    if let Ok(Some(r)) = db::repository::Repository::get_by_id(&pool_clone, &repo_id).await {
+                        let _ = skills::discovery::scan_repository(&pool_clone, &r, false).await;
+                    }
                 }
                 Err(e) => {
-                    repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await.map_err(|e| e.to_string())?;
-                    return Err(e.to_string());
+                    let _ = sqlx::query("UPDATE repositories SET status = 'error', error_message = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+                        .bind(&e)
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
                 }
             }
-        } else {
-            // Normal sync — pull latest
-            match git::sync_repository(&repo).await {
-                Ok(_) => {
-                    repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
-                    let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
-                }
-                Err(e) => {
-                    repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await.map_err(|e| e.to_string())?;
-                    return Err(e.to_string());
-                }
-            }
-        }
-    }
+        });
+    });
 
-    // Return fresh data from DB
+    // Return immediately with syncing status
     db::repository::Repository::get_by_id(&pool, id)
         .await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Repository not found after sync".to_string())
@@ -425,47 +433,56 @@ async fn sync_all_repositories(
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<Vec<db::repository::Repository>, String> {
     let repos = db::repository::Repository::get_all(&pool).await.map_err(|e| e.to_string())?;
-    let mut updated_repos = Vec::new();
 
-    for repo in repos {
+    for repo in &repos {
         if repo.source_type != "local" && repo.url.is_some() {
             let _ = repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await;
 
-            let local_path = std::path::Path::new(&repo.local_path);
-            if !local_path.exists() {
-                let url = repo.url.as_deref().unwrap();
-                let branch = repo.branch.as_deref().unwrap_or("main");
-                let auth_type = repo.auth_type.as_deref().unwrap_or("none");
-                let auth_config = repo.auth_config.as_deref().unwrap_or("{}");
-                match git::clone_repository(url, &repo.local_path, branch, auth_type, auth_config).await {
-                    Ok(_) => {
-                        let _ = repo.update(&pool, None, None, None, None, None, Some("synced"), None).await;
-                        let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+            let repo_id = repo.id.clone();
+            let pool_clone = pool.inner().clone();
+
+            tauri::async_runtime::spawn_blocking(move || {
+                let rt = tokio::runtime::Handle::current();
+                rt.block_on(async {
+                    let fresh_repo = match db::repository::Repository::get_by_id(&pool_clone, &repo_id).await {
+                        Ok(Some(r)) => r,
+                        _ => return,
+                    };
+                    let local_path = std::path::Path::new(&fresh_repo.local_path);
+                    let result = if !local_path.exists() {
+                        let url = fresh_repo.url.as_deref().unwrap();
+                        let branch = fresh_repo.branch.as_deref().unwrap_or("main");
+                        let auth_type = fresh_repo.auth_type.as_deref().unwrap_or("none");
+                        let auth_config = fresh_repo.auth_config.as_deref().unwrap_or("{}");
+                        git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
+                    } else {
+                        git::sync_repository(&fresh_repo).await
+                    };
+                    match result {
+                        Ok(_) => {
+                            let _ = sqlx::query("UPDATE repositories SET status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = ?1")
+                                .bind(&repo_id)
+                                .execute(&pool_clone)
+                                .await;
+                            if let Ok(Some(r)) = db::repository::Repository::get_by_id(&pool_clone, &repo_id).await {
+                                let _ = skills::discovery::scan_repository(&pool_clone, &r, false).await;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = sqlx::query("UPDATE repositories SET status = 'error', error_message = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+                                .bind(e.to_string())
+                                .bind(&repo_id)
+                                .execute(&pool_clone)
+                                .await;
+                        }
                     }
-                    Err(e) => {
-                        let _ = repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await;
-                    }
-                }
-            } else {
-                match git::sync_repository(&repo).await {
-                    Ok(_) => {
-                        let _ = repo.update(&pool, None, None, None, None, None, Some("synced"), None).await;
-                        let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
-                    }
-                    Err(e) => {
-                        let _ = repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await;
-                    }
-                }
-            }
-        }
-        // Re-fetch from DB to get the latest status after sync
-        match db::repository::Repository::get_by_id(&pool, &repo.id).await {
-            Ok(Some(fresh_repo)) => updated_repos.push(fresh_repo),
-            _ => updated_repos.push(repo),
+                });
+            });
         }
     }
 
-    Ok(updated_repos)
+    // Return all repos with their current statuses
+    db::repository::Repository::get_all(&pool).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

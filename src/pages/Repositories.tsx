@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRepositoryStore } from "@/store/repositoryStore";
 import { Button } from "@/components/ui/button";
@@ -470,9 +470,28 @@ export function Repositories() {
     loadData();
   }, [loadData]);
 
-  // Auto-refresh while any repo is syncing
+  // Track previous statuses to detect sync completion/failure
+  const prevStatusRef = useRef<Record<string, string>>({});
+
+  // Auto-refresh while any repo is syncing + detect status transitions
   useEffect(() => {
     const hasSyncing = repositories.some((r) => r.status === "syncing");
+
+    // Detect status transitions: syncing → synced/error
+    for (const repo of repositories) {
+      const prev = prevStatusRef.current[repo.id];
+      if (prev === "syncing" && repo.status === "synced") {
+        toast.success(`Repository "${repo.name}" synced successfully`);
+      } else if (prev === "syncing" && repo.status === "error") {
+        toast.error(
+          `Sync failed for "${repo.name}": ${repo.error_message ?? "Unknown error"}`,
+        );
+      }
+    }
+    prevStatusRef.current = Object.fromEntries(
+      repositories.map((r) => [r.id, r.status]),
+    );
+
     if (!hasSyncing) return;
     const interval = setInterval(loadData, 3000);
     return () => clearInterval(interval);
@@ -482,27 +501,18 @@ export function Repositories() {
     async (id: string) => {
       setSyncingId(id);
       try {
-        const updated = await syncRepository(id);
-        // Store already updated repos array, but also refresh skill counts
-        await getSkillCounts();
-        if (updated.status === "synced") {
-          toast.success("Repository synced successfully");
-        } else if (updated.status === "error") {
-          toast.error(
-            `Sync failed: ${updated.error_message ?? "Unknown error"}`,
-          );
-        }
+        await syncRepository(id);
+        await loadData();
       } catch (error) {
         toast.error(
           `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
         );
-        // Re-fetch to get the error status from backend
         await getRepositories();
       } finally {
         setSyncingId(null);
       }
     },
-    [syncRepository, getSkillCounts, getRepositories],
+    [syncRepository, loadData, getRepositories],
   );
 
   const handleSyncAll = useCallback(async () => {

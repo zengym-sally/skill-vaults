@@ -34,11 +34,14 @@ impl Repository {
         local_path: &str,
         status: &str,
         skills_path: Option<&str>,
+        auth_type: Option<&str>,
+        auth_config: Option<&str>,
+        branch: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let id = Uuid::new_v4().to_string();
         let repo = sqlx::query_as::<_, Repository>(
-            "INSERT INTO repositories (id, name, url, path, source_type, local_path, status, skills_path)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, COALESCE(?8, 'skills'))
+            "INSERT INTO repositories (id, name, url, path, source_type, local_path, status, skills_path, auth_type, auth_config, branch)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, COALESCE(?8, 'skills'), ?9, ?10, ?11)
              RETURNING *"
         )
         .bind(&id)
@@ -49,9 +52,12 @@ impl Repository {
         .bind(local_path)
         .bind(status)
         .bind(skills_path)
+        .bind(auth_type)
+        .bind(auth_config)
+        .bind(branch)
         .fetch_one(pool)
         .await?;
-        
+
         Ok(repo)
     }
     

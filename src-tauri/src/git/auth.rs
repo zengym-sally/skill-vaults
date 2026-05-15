@@ -6,6 +6,11 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
+struct TokenAuthConfig {
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct SshAuthConfig {
     private_key: String,
     passphrase: Option<String>,
@@ -49,6 +54,11 @@ pub fn get_auth(auth_type: &str, auth_config: &str, username_from_url: Option<&s
             } else {
                 Cred::default()
             }
+        }
+        "token" => {
+            let config: TokenAuthConfig = serde_json::from_str(auth_config)
+                .map_err(|e| git2::Error::from_str(&format!("Invalid token auth config: {}", e)))?;
+            Cred::userpass_plaintext("x-access-token", &config.token)
         }
         "ssh" => {
             let config: SshAuthConfig = serde_json::from_str(auth_config)
