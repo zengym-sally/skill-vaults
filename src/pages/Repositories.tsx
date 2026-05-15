@@ -118,7 +118,6 @@ function RepoRow({
   } else {
     subtitleParts.push(repo.path);
   }
-  subtitleParts.push(`${skillCount} skill${skillCount !== 1 ? "s" : ""}`);
   if (repo.status === "synced" && repo.last_synced_at) {
     subtitleParts.push(getRelativeTime(repo.last_synced_at));
   }
@@ -143,6 +142,9 @@ function RepoRow({
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">{repo.name}</span>
             <Badge className={status.badge}>{status.label}</Badge>
+            <Badge className="bg-foreground/5 text-foreground/60 border-foreground/10">
+              {skillCount} skill{skillCount !== 1 ? "s" : ""}
+            </Badge>
           </div>
           <p
             className={`text-xs mt-0.5 truncate ${
@@ -230,18 +232,27 @@ export function Repositories() {
     async (id: string) => {
       setSyncingId(id);
       try {
-        await syncRepository(id);
+        const updated = await syncRepository(id);
+        // Store already updated repos array, but also refresh skill counts
         await getSkillCounts();
-        toast.success("Repository synced successfully");
+        if (updated.status === "synced") {
+          toast.success("Repository synced successfully");
+        } else if (updated.status === "error") {
+          toast.error(
+            `Sync failed: ${updated.error_message ?? "Unknown error"}`,
+          );
+        }
       } catch (error) {
         toast.error(
           `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
         );
+        // Re-fetch to get the error status from backend
+        await getRepositories();
       } finally {
         setSyncingId(null);
       }
     },
-    [syncRepository, getSkillCounts],
+    [syncRepository, getSkillCounts, getRepositories],
   );
 
   const handleSyncAll = useCallback(async () => {

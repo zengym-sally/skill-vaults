@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS repositories (
     auth_type TEXT,
     auth_config TEXT,
     branch TEXT,
+    skills_path TEXT NOT NULL DEFAULT 'skills',
     last_synced_at DATETIME,
     last_checked_at DATETIME,
     status TEXT NOT NULL,

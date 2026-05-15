@@ -13,6 +13,7 @@ pub struct Repository {
     pub auth_type: Option<String>,
     pub auth_config: Option<String>,
     pub branch: Option<String>,
+    pub skills_path: String,
     pub last_synced_at: Option<DateTime<Utc>>,
     pub last_checked_at: Option<DateTime<Utc>>,
     pub status: String,
@@ -31,10 +32,11 @@ impl Repository {
         source_type: &str,
         local_path: &str,
         status: &str,
+        skills_path: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let repo = sqlx::query_as::<_, Repository>(
-            "INSERT INTO repositories (name, url, path, source_type, local_path, status) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6) 
+            "INSERT INTO repositories (name, url, path, source_type, local_path, status, skills_path)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 'skills'))
              RETURNING *"
         )
         .bind(name)
@@ -43,6 +45,7 @@ impl Repository {
         .bind(source_type)
         .bind(local_path)
         .bind(status)
+        .bind(skills_path)
         .fetch_one(pool)
         .await?;
         

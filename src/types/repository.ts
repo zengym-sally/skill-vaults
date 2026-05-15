@@ -8,6 +8,7 @@ export interface Repository {
   auth_type?: string;
   auth_config?: string;
   branch?: string;
+  skills_path: string;
   last_synced_at?: string;
   last_checked_at?: string;
   status: "pending" | "syncing" | "synced" | "error";
@@ -25,4 +26,5 @@ export interface CreateRepositoryRequest {
   auth_type?: string;
   auth_config?: string;
   branch?: string;
+  skills_path?: string;
 }

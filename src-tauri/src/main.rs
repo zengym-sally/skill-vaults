@@ -131,6 +131,7 @@ async fn add_repository(
     auth_type: Option<&str>,
     auth_config: Option<&str>,
     branch: Option<&str>,
+    skills_path: Option<&str>, // stored in DB, used by skill scanner
     copy: Option<bool>,
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<db::repository::Repository, String> {
@@ -159,7 +160,7 @@ async fn add_repository(
         let url = url.ok_or_else(|| "URL is required for Git repositories".to_string())?;
 
         let repo = db::repository::Repository::create(
-            &pool, name, Some(url), path, source_type, local_path_str, "pending",
+            &pool, name, Some(url), path, source_type, local_path_str, "pending", skills_path,
         ).await.map_err(|e| e.to_string())?;
 
         match git::clone_repository(
@@ -192,7 +193,7 @@ async fn add_repository(
         }
 
         let repo = db::repository::Repository::create(
-            &pool, name, None, path, source_type, local_path_str, "pending",
+            &pool, name, None, path, source_type, local_path_str, "pending", skills_path,
         ).await.map_err(|e| e.to_string())?;
 
         fn copy_dir(source: &Path, target: &Path) -> Result<(), String> {
@@ -278,7 +279,38 @@ async fn sync_repository(
         .await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Repository not found".to_string())?;
 
-    if repo.source_type != "local" && repo.url.is_some() {
+    if repo.source_type == "local" {
+        // For local repos: re-copy from source directory
+        let source_path = std::path::Path::new(&repo.path);
+        let local_path = std::path::Path::new(&repo.local_path);
+
+        repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
+
+        fn copy_dir_recursive(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
+            std::fs::create_dir_all(target).map_err(|e| format!("Failed to create directory: {}", e))?;
+            for entry in std::fs::read_dir(source).map_err(|e| format!("Failed to read directory: {}", e))? {
+                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                let src = entry.path();
+                let dst = target.join(entry.file_name());
+                if src.is_dir() {
+                    copy_dir_recursive(&src, &dst)?;
+                } else {
+                    std::fs::copy(&src, &dst).map_err(|e| format!("Failed to copy file: {}", e))?;
+                }
+            }
+            Ok(())
+        }
+
+        match copy_dir_recursive(source_path, local_path) {
+            Ok(_) => {
+                repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
+            }
+            Err(e) => {
+                repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e)).await.map_err(|e| e.to_string())?;
+                return Err(e);
+            }
+        }
+    } else if repo.url.is_some() {
         repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
         match git::sync_repository(&repo).await {
             Ok(_) => {
@@ -291,7 +323,10 @@ async fn sync_repository(
         }
     }
 
-    Ok(repo)
+    // Return fresh data from DB
+    db::repository::Repository::get_by_id(&pool, id)
+        .await.map_err(|e| e.to_string())?
+        .ok_or_else(|| "Repository not found after sync".to_string())
 }
 
 #[tauri::command]

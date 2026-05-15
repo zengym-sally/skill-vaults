@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 type RepoType = "remote" | "local";
 type AuthType = "none" | "token" | "ssh";
@@ -44,6 +44,7 @@ export function AddRepositoryDialog({
   const [token, setToken] = useState("");
   const [sshKeyPath, setSshKeyPath] = useState("");
   const [localPath, setLocalPath] = useState("");
+  const [skillsPath, setSkillsPath] = useState("skills");
   const [submitting, setSubmitting] = useState(false);
 
   const resetForm = () => {
@@ -55,6 +56,7 @@ export function AddRepositoryDialog({
     setToken("");
     setSshKeyPath("");
     setLocalPath("");
+    setSkillsPath("skills");
     setSubmitting(false);
   };
 
@@ -94,12 +96,14 @@ export function AddRepositoryDialog({
           authType: authType === "none" ? undefined : authType,
           authConfig: authConfig !== "{}" ? authConfig : undefined,
           branch: branch.trim() || undefined,
+          skillsPath: skillsPath.trim() || undefined,
         });
       } else {
         await invoke("add_repository", {
           name: name.trim(),
           path: localPath.trim(),
           sourceType: "local",
+          skillsPath: skillsPath.trim() || undefined,
           copy: true,
         });
       }
@@ -119,7 +123,7 @@ export function AddRepositoryDialog({
 
   const handlePickDirectory = async () => {
     try {
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await openDialog({ directory: true, multiple: false });
       if (selected) {
         setLocalPath(selected);
       }
@@ -178,6 +182,23 @@ export function AddRepositoryDialog({
               placeholder="e.g. open-skills"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+
+          {/* Skills directory */}
+          <div className="grid gap-2">
+            <Label htmlFor="skills-path">
+              Skills Directory{" "}
+              <span className="text-muted-foreground">
+                (subdirectory within repo, default: skills)
+              </span>
+            </Label>
+            <Input
+              id="skills-path"
+              placeholder="skills"
+              value={skillsPath}
+              onChange={(e) => setSkillsPath(e.target.value)}
               disabled={submitting}
             />
           </div>
