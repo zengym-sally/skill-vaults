@@ -303,7 +303,7 @@ async fn update_repository(
     skills_path: Option<&str>,
     pool: tauri::State<'_, sqlx::SqlitePool>,
 ) -> Result<db::repository::Repository, String> {
-    let repo = db::repository::Repository::get_by_id(&pool, id)
+    let _repo = db::repository::Repository::get_by_id(&pool, id)
         .await.map_err(|e| e.to_string())?
         .ok_or_else(|| "Repository not found".to_string())?;
 
