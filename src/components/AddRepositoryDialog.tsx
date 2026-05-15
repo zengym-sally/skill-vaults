@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 type RepoType = "remote" | "local";
-type AuthType = "none" | "token" | "ssh";
+type AuthType = "none" | "token" | "ssh" | "http";
 
 interface AddRepositoryDialogProps {
   open: boolean;
@@ -43,6 +43,8 @@ export function AddRepositoryDialog({
   const [authType, setAuthType] = useState<AuthType>("none");
   const [token, setToken] = useState("");
   const [sshKeyPath, setSshKeyPath] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [localPath, setLocalPath] = useState("");
   const [skillsPath, setSkillsPath] = useState("skills");
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +57,8 @@ export function AddRepositoryDialog({
     setAuthType("none");
     setToken("");
     setSshKeyPath("");
+    setUsername("");
+    setPassword("");
     setLocalPath("");
     setSkillsPath("skills");
     setSubmitting(false);
@@ -85,8 +89,10 @@ export function AddRepositoryDialog({
           authType === "token"
             ? JSON.stringify({ token })
             : authType === "ssh"
-              ? JSON.stringify({ key_path: sshKeyPath })
-              : "{}";
+              ? JSON.stringify({ private_key: sshKeyPath })
+              : authType === "http"
+                ? JSON.stringify({ username, password })
+                : "{}";
 
         await invoke("add_repository", {
           name: name.trim(),
@@ -263,6 +269,15 @@ export function AddRepositoryDialog({
                   >
                     SSH Key
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={authType === "http" ? "secondary" : "ghost"}
+                    onClick={() => setAuthType("http")}
+                    disabled={submitting}
+                  >
+                    User/Pass
+                  </Button>
                 </div>
               </div>
 
@@ -293,6 +308,31 @@ export function AddRepositoryDialog({
                     disabled={submitting}
                   />
                 </div>
+              )}
+
+              {/* HTTP auth input */}
+              {authType === "http" && (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor="repo-username">Username</Label>
+                    <Input
+                      id="repo-username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="repo-password">Password</Label>
+                    <Input
+                      id="repo-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                </>
               )}
             </>
           ) : (
