@@ -393,8 +393,17 @@ async fn sync_repository(
                         git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
                             .map_err(|e| e.to_string())?;
                     } else {
-                        git::sync_repository(&fresh_repo).await
-                            .map_err(|e| e.to_string())?;
+                        // Try pull first; if it fails (corrupted repo), delete and re-clone
+                        let pull_result = git::sync_repository(&fresh_repo).await;
+                        if let Err(_) = pull_result {
+                            let _ = std::fs::remove_dir_all(&fresh_repo.local_path);
+                            let url = fresh_repo.url.as_deref().unwrap();
+                            let branch = fresh_repo.branch.as_deref().unwrap_or("main");
+                            let auth_type = fresh_repo.auth_type.as_deref().unwrap_or("none");
+                            let auth_config = fresh_repo.auth_config.as_deref().unwrap_or("{}");
+                            git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
+                                .map_err(|e| e.to_string())?;
+                        }
                     }
                 }
 
@@ -456,7 +465,18 @@ async fn sync_all_repositories(
                         let auth_config = fresh_repo.auth_config.as_deref().unwrap_or("{}");
                         git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
                     } else {
-                        git::sync_repository(&fresh_repo).await
+                        // Try pull; on failure, delete and re-clone
+                        match git::sync_repository(&fresh_repo).await {
+                            Ok(()) => Ok(()),
+                            Err(_) => {
+                                let _ = std::fs::remove_dir_all(&fresh_repo.local_path);
+                                let url = fresh_repo.url.as_deref().unwrap();
+                                let branch = fresh_repo.branch.as_deref().unwrap_or("main");
+                                let auth_type = fresh_repo.auth_type.as_deref().unwrap_or("none");
+                                let auth_config = fresh_repo.auth_config.as_deref().unwrap_or("{}");
+                                git::clone_repository(url, &fresh_repo.local_path, branch, auth_type, auth_config).await
+                            }
+                        }
                     };
                     match result {
                         Ok(_) => {
