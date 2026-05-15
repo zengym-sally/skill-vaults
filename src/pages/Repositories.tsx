@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useRepositoryStore } from "@/store/repositoryStore";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +19,7 @@ import {
   FolderOpen,
   MoreVertical,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -90,6 +94,7 @@ interface RepoRowProps {
   skillCount: number;
   syncingId: string | null;
   onSync: (id: string) => void;
+  onEdit: (repo: Repository) => void;
   onDelete: (repo: Repository) => void;
 }
 
@@ -98,6 +103,7 @@ function RepoRow({
   skillCount,
   syncingId,
   onSync,
+  onEdit,
   onDelete,
 }: RepoRowProps) {
   const status = getStatusStyle(repo.status);
@@ -189,6 +195,10 @@ function RepoRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(repo)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"
               onClick={() => onDelete(repo)}
@@ -199,6 +209,81 @@ function RepoRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+    </div>
+  );
+}
+
+function EditRepoForm({
+  repo,
+  onSave,
+  onCancel,
+}: {
+  repo: Repository;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(repo.name);
+  const [skillsPath, setSkillsPath] = useState(repo.skills_path);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await invoke("update_repository", {
+        id: repo.id,
+        name: name.trim(),
+        skillsPath: skillsPath.trim() || "skills",
+      });
+      toast.success("Repository updated");
+      onSave();
+    } catch (error) {
+      toast.error(
+        `Update failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="edit-name">Name</Label>
+        <Input
+          id="edit-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={saving}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="edit-skills-path">Skills Directory</Label>
+        <Input
+          id="edit-skills-path"
+          value={skillsPath}
+          onChange={(e) => setSkillsPath(e.target.value)}
+          disabled={saving}
+        />
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save"
+          )}
+        </Button>
+      </DialogFooter>
     </div>
   );
 }
@@ -216,6 +301,7 @@ export function Repositories() {
   } = useRepositoryStore();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingRepo, setEditingRepo] = useState<Repository | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Repository | null>(null);
@@ -227,6 +313,14 @@ export function Repositories() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-refresh while any repo is syncing
+  useEffect(() => {
+    const hasSyncing = repositories.some((r) => r.status === "syncing");
+    if (!hasSyncing) return;
+    const interval = setInterval(loadData, 3000);
+    return () => clearInterval(interval);
+  }, [repositories, loadData]);
 
   const handleSync = useCallback(
     async (id: string) => {
@@ -347,6 +441,7 @@ export function Repositories() {
               skillCount={skillCounts[repo.id] ?? 0}
               syncingId={syncingId}
               onSync={handleSync}
+              onEdit={setEditingRepo}
               onDelete={setDeleteTarget}
             />
           ))}
@@ -359,6 +454,33 @@ export function Repositories() {
         onOpenChange={setDialogOpen}
         onSuccess={loadData}
       />
+
+      {/* Edit Repository Dialog */}
+      <Dialog
+        open={!!editingRepo}
+        onOpenChange={(v) => {
+          if (!v) setEditingRepo(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Repository</DialogTitle>
+            <DialogDescription>
+              Update repository settings for &quot;{editingRepo?.name}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          {editingRepo && (
+            <EditRepoForm
+              repo={editingRepo}
+              onSave={async () => {
+                setEditingRepo(null);
+                await loadData();
+              }}
+              onCancel={() => setEditingRepo(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

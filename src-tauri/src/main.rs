@@ -15,6 +15,21 @@ mod test_utils;
 use crate::db::dispatch_template::{DispatchTemplate, CreateDispatchTemplateInput, UpdateDispatchTemplateInput};
 use crate::db::dispatch::DispatchMethod;
 
+fn copy_dir_sync(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(target).map_err(|e| format!("Failed to create directory: {}", e))?;
+    for entry in std::fs::read_dir(source).map_err(|e| format!("Failed to read directory: {}", e))? {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let src = entry.path();
+        let dst = target.join(entry.file_name());
+        if src.is_dir() {
+            copy_dir_sync(&src, &dst)?;
+        } else {
+            std::fs::copy(&src, &dst).map_err(|e| format!("Failed to copy file: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 // ------------------------------
 // General Config Commands
 // ------------------------------
@@ -114,7 +129,6 @@ async fn set_git_executable_path(
 // ------------------------------
 
 use std::path::Path;
-use std::fs;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -160,24 +174,37 @@ async fn add_repository(
         let url = url.ok_or_else(|| "URL is required for Git repositories".to_string())?;
 
         let repo = db::repository::Repository::create(
-            &pool, name, Some(url), path, source_type, local_path_str, "pending", skills_path,
+            &pool, name, Some(url), path, source_type, local_path_str, "syncing", skills_path,
         ).await.map_err(|e| e.to_string())?;
 
-        match git::clone_repository(
-            url, local_path_str,
-            branch.unwrap_or("main"),
-            auth_type.unwrap_or("none"),
-            auth_config.unwrap_or("{}"),
-        ).await {
-            Ok(_) => {
-                repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
+        // Clone in background
+        let repo_id = repo.id.clone();
+        let pool_clone = pool.inner().clone();
+        let url_owned = url.to_string();
+        let branch_owned = branch.unwrap_or("main").to_string();
+        let auth_type_owned = auth_type.unwrap_or("none").to_string();
+        let auth_config_owned = auth_config.unwrap_or("{}").to_string();
+        let lp_owned = local_path_str.to_string();
+        tauri::async_runtime::spawn(async move {
+            let result = git::clone_repository(
+                &url_owned, &lp_owned, &branch_owned, &auth_type_owned, &auth_config_owned,
+            ).await;
+            match result {
+                Ok(_) => {
+                    let _ = sqlx::query("UPDATE repositories SET status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = ?1")
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
+                }
+                Err(e) => {
+                    let _ = sqlx::query("UPDATE repositories SET status = 'error', error_message = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+                        .bind(e.to_string())
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
+                }
             }
-            Err(e) => {
-                let _ = repo.delete(&pool).await;
-                let _ = fs::remove_dir_all(&local_path);
-                return Err(e.to_string());
-            }
-        }
+        });
 
         Ok(repo)
     } else if source_type == "local" {
@@ -194,51 +221,48 @@ async fn add_repository(
         }
 
         let repo = db::repository::Repository::create(
-            &pool, name, None, path, source_type, local_path_str, "pending", skills_path,
+            &pool, name, None, path, source_type, local_path_str, "syncing", skills_path,
         ).await.map_err(|e| e.to_string())?;
 
-        fn copy_dir(source: &Path, target: &Path) -> Result<(), String> {
-            fs::create_dir_all(target).map_err(|e| format!("Failed to create directory: {}", e))?;
-            for entry in fs::read_dir(source).map_err(|e| format!("Failed to read source directory: {}", e))? {
-                let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-                let entry_path = entry.path();
-                let target_entry_path = target.join(entry.file_name());
-                if entry_path.is_dir() {
-                    copy_dir(&entry_path, &target_entry_path)?;
-                } else {
-                    fs::copy(&entry_path, &target_entry_path).map_err(|e| format!("Failed to copy file: {}", e))?;
+        // Copy/symlink in background
+        let repo_id = repo.id.clone();
+        let pool_clone = pool.inner().clone();
+        let lp_owned = local_path_str.to_string();
+        let src_owned = path.to_string();
+        let should_copy = copy.unwrap_or(false);
+        tauri::async_runtime::spawn(async move {
+            let result = if should_copy {
+                copy_dir_sync(Path::new(&src_owned), Path::new(&lp_owned))
+            } else {
+                #[cfg(unix)]
+                {
+                    std::os::unix::fs::symlink(&src_owned, &lp_owned)
+                        .map_err(|e| format!("Failed to create symbolic link: {}", e))
+                }
+                #[cfg(windows)]
+                {
+                    std::os::windows::fs::symlink_dir(&src_owned, &lp_owned)
+                        .map_err(|e| format!("Failed to create symbolic link: {}", e))
+                }
+            };
+            match result {
+                Ok(_) => {
+                    let _ = sqlx::query("UPDATE repositories SET status = 'synced', updated_at = CURRENT_TIMESTAMP WHERE id = ?1")
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
+                }
+                Err(e) => {
+                    let _ = sqlx::query("UPDATE repositories SET status = 'error', error_message = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+                        .bind(e)
+                        .bind(&repo_id)
+                        .execute(&pool_clone)
+                        .await;
                 }
             }
-            Ok(())
-        }
+        });
 
-        let copy = copy.unwrap_or(false);
-        let result = if copy {
-            copy_dir(source_path, &local_path)
-        } else {
-            #[cfg(unix)]
-            {
-                std::os::unix::fs::symlink(source_path, &local_path)
-                    .map_err(|e| format!("Failed to create symbolic link: {}", e))
-            }
-            #[cfg(windows)]
-            {
-                std::os::windows::fs::symlink_dir(source_path, &local_path)
-                    .map_err(|e| format!("Failed to create symbolic link: {}", e))
-            }
-        };
-
-        match result {
-            Ok(_) => {
-                repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
-                Ok(repo)
-            }
-            Err(e) => {
-                let _ = repo.delete(&pool).await;
-                let _ = fs::remove_dir_all(&local_path);
-                Err(e)
-            }
-        }
+        Ok(repo)
     } else {
         Err("Invalid source type".to_string())
     }
@@ -273,6 +297,33 @@ async fn delete_repository(
 }
 
 #[tauri::command]
+async fn update_repository(
+    id: &str,
+    name: Option<&str>,
+    skills_path: Option<&str>,
+    pool: tauri::State<'_, sqlx::SqlitePool>,
+) -> Result<db::repository::Repository, String> {
+    let repo = db::repository::Repository::get_by_id(&pool, id)
+        .await.map_err(|e| e.to_string())?
+        .ok_or_else(|| "Repository not found".to_string())?;
+
+    if let Some(name) = name {
+        sqlx::query("UPDATE repositories SET name = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+            .bind(name).bind(id)
+            .execute(pool.inner()).await.map_err(|e| e.to_string())?;
+    }
+    if let Some(sp) = skills_path {
+        sqlx::query("UPDATE repositories SET skills_path = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2")
+            .bind(sp).bind(id)
+            .execute(pool.inner()).await.map_err(|e| e.to_string())?;
+    }
+
+    db::repository::Repository::get_by_id(&pool, id)
+        .await.map_err(|e| e.to_string())?
+        .ok_or_else(|| "Repository not found after update".to_string())
+}
+
+#[tauri::command]
 async fn sync_repository(
     id: &str,
     pool: tauri::State<'_, sqlx::SqlitePool>,
@@ -282,28 +333,12 @@ async fn sync_repository(
         .ok_or_else(|| "Repository not found".to_string())?;
 
     if repo.source_type == "local" {
-        // For local repos: re-copy from source directory
         let source_path = std::path::Path::new(&repo.path);
         let local_path = std::path::Path::new(&repo.local_path);
 
         repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
 
-        fn copy_dir_recursive(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
-            std::fs::create_dir_all(target).map_err(|e| format!("Failed to create directory: {}", e))?;
-            for entry in std::fs::read_dir(source).map_err(|e| format!("Failed to read directory: {}", e))? {
-                let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-                let src = entry.path();
-                let dst = target.join(entry.file_name());
-                if src.is_dir() {
-                    copy_dir_recursive(&src, &dst)?;
-                } else {
-                    std::fs::copy(&src, &dst).map_err(|e| format!("Failed to copy file: {}", e))?;
-                }
-            }
-            Ok(())
-        }
-
-        match copy_dir_recursive(source_path, local_path) {
+        match copy_dir_sync(source_path, local_path) {
             Ok(_) => {
                 repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
             }
@@ -505,6 +540,7 @@ fn main() {
             add_repository,
             list_repositories,
             get_repository,
+            update_repository,
             delete_repository,
             sync_repository,
             sync_all_repositories,
