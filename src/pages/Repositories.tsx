@@ -250,24 +250,26 @@ function EditRepoForm({
   };
 
   return (
-    <div className="grid gap-4 py-4">
-      <div className="grid gap-2">
-        <Label htmlFor="edit-name">Name</Label>
-        <Input
-          id="edit-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={saving}
-        />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="edit-skills-path">Skills Directory</Label>
-        <Input
-          id="edit-skills-path"
-          value={skillsPath}
-          onChange={(e) => setSkillsPath(e.target.value)}
-          disabled={saving}
-        />
+    <>
+      <div className="grid gap-4 py-4">
+        <div className="grid gap-2">
+          <Label htmlFor="edit-name">Name</Label>
+          <Input
+            id="edit-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="edit-skills-path">Skills Directory</Label>
+          <Input
+            id="edit-skills-path"
+            value={skillsPath}
+            onChange={(e) => setSkillsPath(e.target.value)}
+            disabled={saving}
+          />
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={saving}>
@@ -284,7 +286,7 @@ function EditRepoForm({
           )}
         </Button>
       </DialogFooter>
-    </div>
+    </>
   );
 }
 
