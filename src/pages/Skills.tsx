@@ -1,4 +1,4 @@
-import { useEffect, useState, memo, useCallback } from "react";
+import { useEffect, useRef, useState, memo, useCallback } from "react";
 import { useSkillStore } from "../store/skillStore";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Edit,
   Trash2,
-  Plus,
   Search,
   AlertCircle,
   Send,
@@ -53,7 +52,7 @@ const Badge = ({
   className?: string;
 }) => (
   <span
-    className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors ${className}`}
+    className={`inline-flex items-center rounded-lg border px-2 py-0.5 text-xs font-medium transition-colors ${className}`}
   >
     {children}
   </span>
@@ -69,7 +68,6 @@ interface SkillCardProps {
   getSourceTypeColor: (sourceType: string) => string;
 }
 
-// Memoized skill card component to prevent unnecessary re-renders
 const SkillCard = memo(
   ({
     skill,
@@ -81,18 +79,18 @@ const SkillCard = memo(
     getSourceTypeColor,
   }: SkillCardProps) => {
     return (
-      <Card className="overflow-hidden hover:shadow-md transition-shadow">
+      <Card className="hover:scale-[1.01] hover:bg-white/75">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div className="flex items-start gap-3">
               <button
                 onClick={() => onToggleSelect(skill.id)}
-                className="mt-1 focus:outline-none"
+                className="mt-1 focus:outline-none cursor-pointer"
               >
                 {isSelected ? (
-                  <CheckSquare className="h-5 w-5 text-blue-500" />
+                  <CheckSquare className="h-5 w-5 text-teal-500" />
                 ) : (
-                  <Square className="h-5 w-5 text-gray-400" />
+                  <Square className="h-5 w-5 text-muted-foreground/50" />
                 )}
               </button>
               <CardTitle className="text-xl font-semibold">
@@ -107,11 +105,11 @@ const SkillCard = memo(
             <Badge className={getSourceTypeColor(skill.sourceType)}>
               {skill.sourceType}
             </Badge>
-            <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+            <Badge className="bg-white/60 text-foreground/70 border-white/30">
               {skill.type}
             </Badge>
             {skill.qualityScore && (
-              <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+              <Badge className="bg-teal-500/10 text-teal-600 border-teal-500/20">
                 {skill.qualityScore}/100
               </Badge>
             )}
@@ -119,7 +117,7 @@ const SkillCard = memo(
         </CardHeader>
         <CardContent>
           {skill.description && (
-            <p className="text-gray-600 dark:text-gray-300 mb-4 line-clamp-2">
+            <p className="text-muted-foreground mb-4 line-clamp-2">
               {skill.description}
             </p>
           )}
@@ -128,7 +126,7 @@ const SkillCard = memo(
               {skill.tags.map((tag) => (
                 <Badge
                   key={tag}
-                  className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                  className="bg-white/60 text-foreground/70 border-white/30"
                 >
                   {tag}
                 </Badge>
@@ -136,14 +134,14 @@ const SkillCard = memo(
             </div>
           )}
           {skill.dependencies.length > 0 && (
-            <div className="mt-4 text-sm text-gray-500">
+            <div className="mt-4 text-sm text-muted-foreground">
               <span className="font-medium">Dependencies: </span>
               {skill.dependencies.length}
             </div>
           )}
         </CardContent>
-        <CardFooter className="border-t pt-4 flex justify-between">
-          <div className="text-xs text-gray-500">
+        <CardFooter className="flex justify-between">
+          <div className="text-xs text-muted-foreground">
             Updated {new Date(skill.updatedAt).toLocaleDateString()}
           </div>
           <div className="flex gap-2">
@@ -158,7 +156,7 @@ const SkillCard = memo(
             <Button
               variant="ghost"
               size="sm"
-              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50/50"
               onClick={() => onDelete(skill.id, skill.name)}
             >
               <Trash2 className="h-4 w-4 mr-1" />
@@ -171,7 +169,6 @@ const SkillCard = memo(
   },
 );
 
-// Custom comparator for memo to ensure only relevant changes trigger re-render
 SkillCard.displayName = "SkillCard";
 
 export function Skills() {
@@ -197,6 +194,7 @@ export function Skills() {
     DispatchMethod.Symlink,
   );
   const [isBulkDispatching, setIsBulkDispatching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { targetDirs, fetchTargetDirs, bulkDispatch } = useDispatchStore();
 
@@ -205,13 +203,21 @@ export function Skills() {
   }, [fetchSkills]);
 
   useEffect(() => {
+    const handleOpenSearch = () => {
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("skill-vault:open-search", handleOpenSearch);
+    return () =>
+      window.removeEventListener("skill-vault:open-search", handleOpenSearch);
+  }, []);
+
+  useEffect(() => {
     if (error) {
       toast.error(error);
       clearError();
     }
   }, [error, clearError]);
 
-  // Handle bulk dialog state
   useEffect(() => {
     if (bulkDispatchDialogOpen) {
       fetchTargetDirs().catch((error) => {
@@ -289,26 +295,26 @@ export function Skills() {
   const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case "active":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
+        return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
       case "archived":
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+        return "bg-amber-500/10 text-amber-600 border-amber-500/20";
       case "broken":
-        return "bg-red-500/10 text-red-500 border-red-500/20";
+        return "bg-red-500/10 text-red-600 border-red-500/20";
       default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
+        return "bg-gray-500/10 text-gray-600 border-gray-500/20";
     }
   }, []);
 
   const getSourceTypeColor = useCallback((sourceType: string) => {
     switch (sourceType) {
       case "github":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+        return "bg-blue-500/10 text-blue-600 border-blue-500/20";
       case "private-git":
-        return "bg-purple-500/10 text-purple-500 border-purple-500/20";
+        return "bg-purple-500/10 text-purple-600 border-purple-500/20";
       case "local":
-        return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+        return "bg-orange-500/10 text-orange-600 border-orange-500/20";
       default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
+        return "bg-gray-500/10 text-gray-600 border-gray-500/20";
     }
   }, []);
 
@@ -332,7 +338,6 @@ export function Skills() {
 
       if (result.errors.length > 0) {
         toast.warning(`${result.errors.length} skills failed to dispatch`);
-        // Log errors for debugging
         console.error("Bulk dispatch errors:", result.errors);
       }
 
@@ -352,7 +357,7 @@ export function Skills() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Skills</h1>
-          <p className="text-gray-500">
+          <p className="text-muted-foreground">
             {selectedSkillIds.size > 0
               ? `${selectedSkillIds.size} skills selected`
               : "Manage your skill library"}
@@ -384,10 +389,6 @@ export function Skills() {
                 />
                 Discover Skills
               </Button>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Skill
-              </Button>
             </>
           )}
         </div>
@@ -395,27 +396,30 @@ export function Skills() {
 
       <div className="mb-6">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
           <Input
+            ref={searchInputRef}
             placeholder="Search skills by name, description, or tags..."
             value={searchQuery}
             onChange={handleSearch}
-            className="pl-10"
+            className="pl-10 glass-input rounded-xl"
           />
         </div>
       </div>
 
       {loading && skills.length === 0 && (
         <div className="flex justify-center items-center py-20">
-          <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground/40" />
         </div>
       )}
 
       {!loading && skills.length === 0 && (
         <div className="flex flex-col justify-center items-center py-20 text-center">
-          <AlertCircle className="h-12 w-12 text-gray-400 mb-4" />
+          <div className="w-16 h-16 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4">
+            <AlertCircle className="h-8 w-8 text-muted-foreground/50" />
+          </div>
           <h3 className="text-xl font-medium mb-2">No skills found</h3>
-          <p className="text-gray-500 mb-6 max-w-md">
+          <p className="text-muted-foreground mb-6 max-w-md">
             {searchQuery
               ? "No skills match your search criteria. Try adjusting your search terms."
               : 'You haven\'t added any skills yet. Click "Discover Skills" to scan your repositories for skills.'}
