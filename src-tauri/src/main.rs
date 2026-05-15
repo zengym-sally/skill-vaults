@@ -352,15 +352,37 @@ async fn sync_repository(
             }
         }
     } else if repo.url.is_some() {
+        let local_path = std::path::Path::new(&repo.local_path);
         repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await.map_err(|e| e.to_string())?;
-        match git::sync_repository(&repo).await {
-            Ok(_) => {
-                repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
-                let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+
+        if !local_path.exists() {
+            // Directory missing (clone failed previously) — re-clone
+            let url = repo.url.as_deref().unwrap();
+            let branch = repo.branch.as_deref().unwrap_or("main");
+            let auth_type = repo.auth_type.as_deref().unwrap_or("none");
+            let auth_config = repo.auth_config.as_deref().unwrap_or("{}");
+
+            match git::clone_repository(url, &repo.local_path, branch, auth_type, auth_config).await {
+                Ok(_) => {
+                    repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
+                    let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+                }
+                Err(e) => {
+                    repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await.map_err(|e| e.to_string())?;
+                    return Err(e.to_string());
+                }
             }
-            Err(e) => {
-                repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await.map_err(|e| e.to_string())?;
-                return Err(e.to_string());
+        } else {
+            // Normal sync — pull latest
+            match git::sync_repository(&repo).await {
+                Ok(_) => {
+                    repo.update(&pool, None, None, None, None, None, Some("synced"), None).await.map_err(|e| e.to_string())?;
+                    let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+                }
+                Err(e) => {
+                    repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await.map_err(|e| e.to_string())?;
+                    return Err(e.to_string());
+                }
             }
         }
     }
@@ -381,13 +403,31 @@ async fn sync_all_repositories(
     for repo in repos {
         if repo.source_type != "local" && repo.url.is_some() {
             let _ = repo.update(&pool, None, None, None, None, None, Some("syncing"), None).await;
-            match git::sync_repository(&repo).await {
-                Ok(_) => {
-                    let _ = repo.update(&pool, None, None, None, None, None, Some("synced"), None).await;
-                    let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+
+            let local_path = std::path::Path::new(&repo.local_path);
+            if !local_path.exists() {
+                let url = repo.url.as_deref().unwrap();
+                let branch = repo.branch.as_deref().unwrap_or("main");
+                let auth_type = repo.auth_type.as_deref().unwrap_or("none");
+                let auth_config = repo.auth_config.as_deref().unwrap_or("{}");
+                match git::clone_repository(url, &repo.local_path, branch, auth_type, auth_config).await {
+                    Ok(_) => {
+                        let _ = repo.update(&pool, None, None, None, None, None, Some("synced"), None).await;
+                        let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+                    }
+                    Err(e) => {
+                        let _ = repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await;
+                    }
                 }
-                Err(e) => {
-                    let _ = repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await;
+            } else {
+                match git::sync_repository(&repo).await {
+                    Ok(_) => {
+                        let _ = repo.update(&pool, None, None, None, None, None, Some("synced"), None).await;
+                        let _ = skills::discovery::scan_repository(pool.inner(), &repo, false).await;
+                    }
+                    Err(e) => {
+                        let _ = repo.update(&pool, None, None, None, None, None, Some("error"), Some(&e.to_string())).await;
+                    }
                 }
             }
         }
