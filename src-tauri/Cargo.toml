@@ -1,6 +1,6 @@
 [package]
 name = "skillvault"
-version = "0.1.0"
+version = "0.2.0"
 description = "Skill Vaults - A desktop application for managing your skills and knowledge"
 edition = "2021"
 build = "build.rs"
