@@ -113,6 +113,16 @@ pub async fn init_db(app_handle: &AppHandle) -> Result<(), Box<dyn std::error::E
         "ALTER TABLE repositories ADD COLUMN skills_path TEXT NOT NULL DEFAULT 'skills'"
     ).execute(pool.inner()).await;
 
+    // Migrate: add ai_summary column to skills
+    let _ = sqlx::query(
+        "ALTER TABLE skills ADD COLUMN ai_summary TEXT"
+    ).execute(pool.inner()).await;
+
+    // Migrate: add skills_subdir column to target_dirs
+    let _ = sqlx::query(
+        "ALTER TABLE target_dirs ADD COLUMN skills_subdir TEXT NOT NULL DEFAULT ''"
+    ).execute(pool.inner()).await;
+
     let bootstrap_path = get_bootstrap_path(app_handle);
     let legacy_path = get_legacy_db_path(app_handle);
 

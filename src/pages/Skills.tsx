@@ -15,9 +15,11 @@ import {
   Plus,
   Tag,
   Folder,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DispatchDialog } from "../components/skills/DispatchDialog";
+import { SkillDetailDialog } from "../components/skills/SkillDetailDialog";
 import { Skill } from "../types/skill";
 import { useDispatchStore } from "@/store/dispatchStore";
 import { DispatchMethod, parseDispatchMethod } from "@/types/dispatch";
@@ -60,6 +62,7 @@ interface SkillCardProps {
   onToggleSelect: (skillId: string) => void;
   onDispatch: (skill: Skill) => void;
   onEditTags: (skill: Skill) => void;
+  onDetail: (skill: Skill) => void;
 }
 
 const SkillCard = memo(
@@ -69,6 +72,7 @@ const SkillCard = memo(
     onToggleSelect,
     onDispatch,
     onEditTags,
+    onDetail,
   }: SkillCardProps) => {
     return (
       <Card className="grid grid-rows-[auto_auto_1fr_auto] gap-0 py-0 h-full hover:scale-[1.01] hover:bg-white/75">
@@ -149,6 +153,9 @@ const SkillCard = memo(
             })}
           </span>
           <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={() => onDetail(skill)}>
+              <Eye className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => onEditTags(skill)}>
               <Edit className="h-4 w-4" />
             </Button>
@@ -178,6 +185,8 @@ export function Skills() {
   } = useSkillStore();
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
+  const [detailSkill, setDetailSkill] = useState<Skill | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(
     new Set(),
   );
@@ -274,6 +283,11 @@ export function Skills() {
     setDispatchDialogOpen(true);
   }, []);
 
+  const handleDetail = useCallback((skill: Skill) => {
+    setDetailSkill(skill);
+    setDetailDialogOpen(true);
+  }, []);
+
   const handleEditTags = useCallback((skill: Skill) => {
     setEditingSkill(skill);
     setEditTags([...skill.tags]);
@@ -321,7 +335,7 @@ export function Skills() {
       );
 
       toast.success(
-        `Successfully dispatched ${result.successful.length} skills`,
+        `Successfully dispatched ${result.successful.length} skills. Manage them in the Dispatches page.`,
       );
 
       if (result.errors.length > 0) {
@@ -431,6 +445,7 @@ export function Skills() {
               onToggleSelect={toggleSkillSelection}
               onDispatch={handleDispatch}
               onEditTags={handleEditTags}
+              onDetail={handleDetail}
             />
           ))}
         </div>
@@ -598,6 +613,12 @@ export function Skills() {
         skill={selectedSkill}
         open={dispatchDialogOpen}
         onOpenChange={setDispatchDialogOpen}
+      />
+
+      <SkillDetailDialog
+        skill={detailSkill}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
       />
     </div>
   );

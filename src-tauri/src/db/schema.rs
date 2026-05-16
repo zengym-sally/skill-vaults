@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS skills (
     repository_id TEXT,
     local_path TEXT NOT NULL,
     description TEXT,
+    ai_summary TEXT,
     usage TEXT,
     tags TEXT NOT NULL DEFAULT '[]',
     dependencies TEXT NOT NULL DEFAULT '[]',
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS config (
 CREATE TABLE IF NOT EXISTS target_dirs (
     id TEXT PRIMARY KEY,
     path TEXT NOT NULL UNIQUE,
+    skills_subdir TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

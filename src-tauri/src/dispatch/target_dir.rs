@@ -6,6 +6,7 @@ pub struct TargetDir {
     pub id: String,
     pub name: String,
     pub path: String,
+    pub skills_subdir: String,
     pub description: Option<String>,
     pub created_at: chrono::NaiveDateTime,
     pub updated_at: chrono::NaiveDateTime,
@@ -15,6 +16,7 @@ pub struct TargetDir {
 pub struct CreateTargetDir {
     pub name: String,
     pub path: String,
+    pub skills_subdir: Option<String>,
     pub description: Option<String>,
 }
 
@@ -22,15 +24,17 @@ impl TargetDir {
     pub async fn create(pool: &SqlitePool, create: CreateTargetDir) -> Result<Self, Box<dyn std::error::Error>> {
         let now = chrono::Local::now().naive_local();
         let id = Uuid::new_v4().to_string();
+        let skills_subdir = create.skills_subdir.unwrap_or_default();
 
         let target_dir = sqlx::query_as::<_, TargetDir>(
-            "INSERT INTO target_dirs (id, name, path, description, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+            "INSERT INTO target_dirs (id, name, path, skills_subdir, description, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              RETURNING *"
         )
         .bind(id)
         .bind(create.name)
         .bind(create.path)
+        .bind(&skills_subdir)
         .bind(create.description)
         .bind(now)
         .bind(now)
@@ -65,12 +69,14 @@ impl TargetDir {
 pub async fn add_target_dir(
     name: &str,
     path: &str,
+    skills_subdir: Option<&str>,
     description: Option<&str>,
     pool: tauri::State<'_, SqlitePool>,
 ) -> Result<TargetDir, String> {
     let create = CreateTargetDir {
         name: name.to_string(),
         path: path.to_string(),
+        skills_subdir: skills_subdir.map(|s| s.to_string()),
         description: description.map(|d| d.to_string()),
     };
 

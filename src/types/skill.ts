@@ -6,6 +6,7 @@ export interface Skill {
   repositoryId?: string;
   localPath: string;
   description?: string;
+  aiSummary?: string;
   usage?: string;
   tags: string[];
   dependencies: string[];
@@ -41,6 +42,7 @@ export interface UpdateSkill {
   repositoryId?: string;
   localPath?: string;
   description?: string;
+  aiSummary?: string;
   usage?: string;
   tags?: string[];
   dependencies?: string[];

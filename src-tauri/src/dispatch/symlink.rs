@@ -35,7 +35,16 @@ pub async fn dispatch_skill(
 
     // Build source and destination paths
     let source_path = PathBuf::from(&skill.local_path);
-    let dest_path = PathBuf::from(&target_dir.path).join(&skill.name);
+    let dest_base = if target_dir.skills_subdir.is_empty() {
+        PathBuf::from(&target_dir.path)
+    } else {
+        PathBuf::from(&target_dir.path).join(&target_dir.skills_subdir)
+    };
+    if !dest_base.exists() {
+        std::fs::create_dir_all(&dest_base)
+            .map_err(|e| format!("Failed to create destination directory {}: {}", dest_base.display(), e))?;
+    }
+    let dest_path = dest_base.join(&skill.name);
 
     // Check if source path exists
     if !source_path.exists() {
@@ -222,7 +231,16 @@ async fn process_single_dispatch_with_skill(
 ) -> Result<Dispatch, String> {
     // Build source and destination paths
     let source_path = PathBuf::from(&skill.local_path);
-    let dest_path = PathBuf::from(&target_dir.path).join(&skill.name);
+    let dest_base = if target_dir.skills_subdir.is_empty() {
+        PathBuf::from(&target_dir.path)
+    } else {
+        PathBuf::from(&target_dir.path).join(&target_dir.skills_subdir)
+    };
+    if !dest_base.exists() {
+        std::fs::create_dir_all(&dest_base)
+            .map_err(|e| format!("Failed to create destination directory {}: {}", dest_base.display(), e))?;
+    }
+    let dest_path = dest_base.join(&skill.name);
 
     // Check if source path exists
     if !source_path.exists() {

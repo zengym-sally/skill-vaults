@@ -495,7 +495,7 @@ describe("dispatchStore", () => {
         .getState()
         .dispatchTemplate("t1", "1", DispatchMethod.Copy);
 
-      expect(invoke).toHaveBeenNthCalledWith(1, "dispatch_template", {
+      expect(invoke).toHaveBeenNthCalledWith(1, "dispatch_template_cmd", {
         templateId: "t1",
         targetDir: "1",
         method: DispatchMethod.Copy,

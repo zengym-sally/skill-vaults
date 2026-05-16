@@ -110,6 +110,7 @@ pub async fn list_skills(
             repository_id: row.get("repository_id"),
             local_path: row.get("local_path"),
             description: row.get("description"),
+            ai_summary: row.try_get("ai_summary").unwrap_or(None),
             usage: row.get("usage"),
             tags,
             dependencies,
@@ -148,4 +149,41 @@ pub async fn delete_skill_command(
     crate::db::skill::delete_skill(pool.inner(), id)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Read skill file content for display in detail dialog
+#[tauri::command]
+pub async fn read_skill_file(
+    skill_id: String,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<String, String> {
+    let skill = crate::db::skill::get_skill_by_id(pool.inner(), &skill_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Skill with id {} not found", skill_id))?;
+
+    let path = std::path::Path::new(&skill.local_path);
+    if path.is_dir() {
+        let readme_path = path.join("README.md");
+        let target = if path.join("SKILL.md").exists() {
+            path.join("SKILL.md")
+        } else if path.join("index.md").exists() {
+            path.join("index.md")
+        } else if readme_path.exists() {
+            readme_path
+        } else {
+            // List files in directory
+            let entries: Vec<String> = std::fs::read_dir(path)
+                .map_err(|e| format!("Failed to read skill directory: {}", e))?
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+            return Ok(format!("Skill directory contains:\n{}", entries.join("\n")));
+        };
+        std::fs::read_to_string(&target)
+            .map_err(|e| format!("Failed to read skill file: {}", e))
+    } else {
+        std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read skill file: {}", e))
+    }
 }

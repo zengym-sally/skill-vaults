@@ -1,11 +1,62 @@
 use std::path::PathBuf;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tauri::State;
 use chrono::Utc;
 
 use crate::db::dispatch::{Dispatch, DispatchMethod, SyncStatus};
 use super::copy::copy_dir;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncTargetDirResult {
+    pub synced: Vec<Dispatch>,
+    pub failed: Vec<(String, String)>,
+}
+
+/// Sync all dispatches for a target directory
+#[tauri::command]
+pub async fn sync_target_dir_dispatches(
+    target_dir_id: String,
+    pool: State<'_, SqlitePool>,
+) -> Result<SyncTargetDirResult, String> {
+    let dispatches = Dispatch::get_by_target_dir(&pool, &target_dir_id)
+        .await
+        .map_err(|e| format!("Failed to get dispatches: {}", e))?;
+
+    let mut result = SyncTargetDirResult {
+        synced: Vec::new(),
+        failed: Vec::new(),
+    };
+
+    for dispatch in dispatches {
+        let dispatch_id = dispatch.id.clone();
+        let skill_name = dispatch.skill_id.clone();
+
+        // Check current status
+        let status = check_dispatch_sync(&dispatch_id, pool.clone()).await;
+        let should_sync = match status {
+            Ok(SyncStatus::Outdated) => true,
+            Ok(SyncStatus::Synced) => false,
+            _ => false,
+        };
+
+        if should_sync {
+            match sync_dispatched_skill(&dispatch_id, pool.clone()).await {
+                Ok(updated) => result.synced.push(updated),
+                Err(e) => result.failed.push((skill_name, e)),
+            }
+        } else {
+            // Already synced or un-syncable, just include as-is
+            match status {
+                Ok(SyncStatus::Synced) => result.synced.push(dispatch),
+                _ => result.failed.push((skill_name, "Cannot sync in current state".to_string())),
+            }
+        }
+    }
+
+    Ok(result)
+}
 
 /// Check sync status for a dispatch
 #[tauri::command]

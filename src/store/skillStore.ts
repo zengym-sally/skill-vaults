@@ -27,6 +27,8 @@ interface SkillStore {
     repositoryId?: string;
     force?: boolean;
   }) => Promise<void>;
+  readSkillFile: (skillId: string) => Promise<string>;
+  analyzeSkill: (skillId: string) => Promise<Skill>;
   setSearchQuery: (query: string) => void;
   setFilters: (
     filters: Partial<{
@@ -111,6 +113,30 @@ export const useSkillStore = create<SkillStore>((set, get) => ({
         error: message,
         loading: false,
       });
+      toast.error(message);
+      throw error;
+    }
+  },
+
+  readSkillFile: async (skillId: string) => {
+    try {
+      return await invoke<string>("read_skill_file", { skillId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(message);
+      throw error;
+    }
+  },
+
+  analyzeSkill: async (skillId: string) => {
+    try {
+      const updated = await invoke<Skill>("analyze_skill", { skillId });
+      set((state) => ({
+        skills: state.skills.map((s) => (s.id === skillId ? updated : s)),
+      }));
+      return updated;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       toast.error(message);
       throw error;
     }

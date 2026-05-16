@@ -13,8 +13,27 @@ pub async fn analyze_skill(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("Skill with id {} not found", skill_id))?;
 
-    let content = std::fs::read_to_string(&skill.local_path)
-        .map_err(|e| format!("Failed to read skill file: {}", e))?;
+    let local_path = std::path::Path::new(&skill.local_path);
+    let content = if local_path.is_dir() {
+        let skill_md = local_path.join("SKILL.md");
+        let index_path = local_path.join("index.md");
+        let readme_path = local_path.join("README.md");
+        if skill_md.exists() {
+            std::fs::read_to_string(&skill_md)
+                .map_err(|e| format!("Failed to read skill file: {}", e))?
+        } else if index_path.exists() {
+            std::fs::read_to_string(&index_path)
+                .map_err(|e| format!("Failed to read skill file: {}", e))?
+        } else if readme_path.exists() {
+            std::fs::read_to_string(&readme_path)
+                .map_err(|e| format!("Failed to read skill file: {}", e))?
+        } else {
+            return Err("Cannot analyze skill directory: no SKILL.md, index.md or README.md found".to_string());
+        }
+    } else {
+        std::fs::read_to_string(local_path)
+            .map_err(|e| format!("Failed to read skill file: {}", e))?
+    };
 
     let provider = LLMProvider::get_default(pool.inner())
         .await?
@@ -33,6 +52,7 @@ pub async fn analyze_skill(
             pool.inner(),
             &result.skill_type,
             &result.description,
+            &result.ai_summary,
             &result.usage_instructions,
             &serde_json::to_string(&result.tags).unwrap(),
             &serde_json::to_string(&result.dependencies).unwrap(),

@@ -5,6 +5,7 @@ use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DispatchMethod {
     Symlink,
     Copy,
@@ -164,6 +165,16 @@ impl Dispatch {
     /// Get all dispatch rules
     pub async fn get_all(pool: &SqlitePool) -> Result<Vec<Self>> {
         let rows = sqlx::query("SELECT * FROM dispatch ORDER BY created_at DESC")
+            .fetch_all(pool)
+            .await?;
+
+        rows.iter().map(|r| map_row_to_dispatch(r)).collect()
+    }
+
+    /// Get dispatches by target directory ID
+    pub async fn get_by_target_dir(pool: &SqlitePool, target_dir_id: &str) -> Result<Vec<Self>> {
+        let rows = sqlx::query("SELECT * FROM dispatch WHERE target_dir = ? ORDER BY created_at DESC")
+            .bind(target_dir_id)
             .fetch_all(pool)
             .await?;
 

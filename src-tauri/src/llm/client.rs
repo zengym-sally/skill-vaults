@@ -127,10 +127,59 @@ impl OpenAIClient {
     }
 }
 
+/// Extract JSON content from LLM response, stripping markdown code blocks if present
+fn extract_json(content: &str) -> String {
+    let trimmed = content.trim();
+
+    // Strip ```json ... ``` or ``` ... ``` wrapper
+    if trimmed.starts_with("```") {
+        let without_prefix = trimmed
+            .strip_prefix("```json")
+            .or_else(|| trimmed.strip_prefix("```"))
+            .unwrap_or(trimmed);
+        if let Some(stripped) = without_prefix.strip_suffix("```") {
+            return stripped.trim().to_string();
+        }
+    }
+
+    // Find first { to last } as fallback
+    if let Some(start) = trimmed.find('{') {
+        if let Some(end) = trimmed.rfind('}') {
+            if start < end {
+                return trimmed[start..=end].to_string();
+            }
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn string_or_seq_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match val {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Array(arr) => Ok(arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<_>>()
+            .join("\n")),
+        other => Err(serde::de::Error::custom(format!(
+            "expected string or array, got {:?}",
+            other
+        ))),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillAnalysisResult {
     pub skill_type: String,
     pub description: String,
+    #[serde(deserialize_with = "string_or_seq_string")]
+    pub ai_summary: String,
+    #[serde(deserialize_with = "string_or_seq_string")]
     pub usage_instructions: String,
     pub tags: Vec<String>,
     pub dependencies: Vec<String>,
@@ -254,7 +303,9 @@ impl LLMClient for OpenAIClient {
             .as_ref()
             .ok_or_else(|| "Empty response content".to_string())?;
 
-        let result: SkillAnalysisResult = serde_json::from_str(content)
+        // Extract JSON from possible markdown code blocks
+        let json_str = extract_json(content);
+        let result: SkillAnalysisResult = serde_json::from_str(&json_str)
             .map_err(|e| format!("Failed to parse LLM response: {}", e))?;
 
         Ok(result)
@@ -399,6 +450,7 @@ mod tests {
         let expected_result = SkillAnalysisResult {
             skill_type: "automation".to_string(),
             description: "Test skill for automation".to_string(),
+            ai_summary: "自动化测试技能".to_string(),
             usage_instructions: "Run with cargo test".to_string(),
             tags: vec!["test".to_string(), "automation".to_string()],
             dependencies: vec!["rust".to_string(), "tokio".to_string()],

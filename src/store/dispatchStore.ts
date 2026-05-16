@@ -12,6 +12,11 @@ import {
   UpdateDispatchTemplateInput,
 } from "../types/dispatch";
 
+export interface SyncTargetDirResult {
+  synced: Dispatch[];
+  failed: [string, string][];
+}
+
 interface DispatchStore {
   targetDirs: TargetDir[];
   dispatches: Dispatch[];
@@ -26,6 +31,9 @@ interface DispatchStore {
   deleteTargetDir: (id: string) => Promise<void>;
   checkDispatchSync: (dispatchId: string) => Promise<SyncStatus>;
   syncDispatchedSkill: (dispatchId: string) => Promise<Dispatch>;
+  syncTargetDirDispatches: (
+    targetDirId: string,
+  ) => Promise<SyncTargetDirResult>;
   deleteDispatch: (dispatchId: string) => Promise<boolean>;
   bulkDispatch: (
     skillIds: string[],
@@ -165,6 +173,25 @@ export const useDispatchStore = create<DispatchStore>((set, get) => ({
     }
   },
 
+  syncTargetDirDispatches: async (targetDirId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const result = await invoke<SyncTargetDirResult>(
+        "sync_target_dir_dispatches",
+        { targetDirId },
+      );
+      await get().fetchDispatches();
+      set({ loading: false });
+      return result;
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : String(error),
+        loading: false,
+      });
+      throw error;
+    }
+  },
+
   bulkDispatch: async (
     skillIds: string[],
     targetDirId: string,
@@ -268,7 +295,7 @@ export const useDispatchStore = create<DispatchStore>((set, get) => ({
   ) => {
     set({ loading: true, error: null });
     try {
-      const result = await invoke<BulkDispatchResult>("dispatch_template", {
+      const result = await invoke<BulkDispatchResult>("dispatch_template_cmd", {
         templateId,
         targetDir: targetDirId,
         method,

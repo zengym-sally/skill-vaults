@@ -14,6 +14,7 @@ pub struct Skill {
     pub repository_id: Option<String>,
     pub local_path: String,
     pub description: Option<String>,
+    pub ai_summary: Option<String>,
     pub usage: Option<String>,
     pub tags: Vec<String>,
     pub dependencies: Vec<String>,
@@ -57,6 +58,7 @@ pub struct UpdateSkill {
     pub repository_id: Option<String>,
     pub local_path: Option<String>,
     pub description: Option<String>,
+    pub ai_summary: Option<String>,
     pub usage: Option<String>,
     pub tags: Option<Vec<String>>,
     pub dependencies: Option<Vec<String>>,
@@ -88,6 +90,7 @@ pub fn map_row_to_skill(row: &sqlx::sqlite::SqliteRow) -> Result<Skill> {
         repository_id: row.get("repository_id"),
         local_path: row.get("local_path"),
         description: row.get("description"),
+        ai_summary: row.try_get("ai_summary").unwrap_or(None),
         usage: row.get("usage"),
         tags,
         dependencies,
@@ -142,6 +145,7 @@ pub async fn bulk_create_skills(
             repository_id: create.repository_id.clone(),
             local_path: create.local_path.clone(),
             description: create.description.clone(),
+            ai_summary: None,
             usage: create.usage.clone(),
             tags: create.tags.clone(),
             dependencies: create.dependencies.clone(),
@@ -228,6 +232,7 @@ pub async fn update_skill(
             repository_id = COALESCE(?, repository_id),
             local_path = COALESCE(?, local_path),
             description = COALESCE(?, description),
+            ai_summary = COALESCE(?, ai_summary),
             usage = COALESCE(?, usage),
             tags = COALESCE(?, tags),
             dependencies = COALESCE(?, dependencies),
@@ -244,6 +249,7 @@ pub async fn update_skill(
     .bind(&update.repository_id)
     .bind(&update.local_path)
     .bind(&update.description)
+    .bind(&update.ai_summary)
     .bind(&update.usage)
     .bind(tags_json)
     .bind(dependencies_json)
@@ -280,6 +286,7 @@ impl Skill {
         pool: &sqlx::SqlitePool,
         skill_type: &str,
         description: &str,
+        ai_summary: &str,
         usage: &str,
         tags: &str,
         dependencies: &str,
@@ -294,6 +301,7 @@ impl Skill {
             SET
                 type = ?,
                 description = ?,
+                ai_summary = ?,
                 usage = ?,
                 tags = ?,
                 dependencies = ?,
@@ -305,6 +313,7 @@ impl Skill {
         )
         .bind(skill_type)
         .bind(description)
+        .bind(ai_summary)
         .bind(usage)
         .bind(serde_json::to_string(&tags).unwrap_or_default())
         .bind(serde_json::to_string(&dependencies).unwrap_or_default())
@@ -315,6 +324,7 @@ impl Skill {
 
         self.r#type = skill_type.to_string();
         self.description = Some(description.to_string());
+        self.ai_summary = Some(ai_summary.to_string());
         self.usage = Some(usage.to_string());
         self.tags = tags;
         self.dependencies = dependencies;
@@ -484,6 +494,7 @@ mod tests {
             source_type: None,
             repository_id: None,
             description: None,
+            ai_summary: None,
             usage: None,
             dependencies: None,
         };
@@ -517,6 +528,7 @@ mod tests {
             repository_id: None,
             local_path: None,
             description: None,
+            ai_summary: None,
             usage: None,
             tags: None,
             dependencies: None,
@@ -590,6 +602,7 @@ mod tests {
                 &pool,
                 "utility",
                 "Updated description from analysis",
+                "AI生成的简短摘要",
                 "Updated usage instructions",
                 "[\"analyzed\", \"utility\"]",
                 "[\"dep1\", \"dep2\"]",

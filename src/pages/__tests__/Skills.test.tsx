@@ -373,7 +373,7 @@ describe("Skills Page", () => {
           DispatchMethod.Copy,
         );
         expect(toast.success).toHaveBeenCalledWith(
-          "Successfully dispatched 2 skills",
+          "Successfully dispatched 2 skills. Manage them in the Dispatches page.",
         );
       });
     });
@@ -415,7 +415,7 @@ describe("Skills Page", () => {
 
       await waitFor(() => {
         expect(toast.success).toHaveBeenCalledWith(
-          "Successfully dispatched 1 skills",
+          "Successfully dispatched 1 skills. Manage them in the Dispatches page.",
         );
         expect(toast.warning).toHaveBeenCalledWith(
           "1 skills failed to dispatch",
