@@ -1,89 +1,122 @@
-# SkillVault
+# Skill Vaults
 
-> A modern desktop application for managing your OpenCode/OhMyOpenCode skill library.
+A cross-platform desktop application for managing and dispatching AI skill libraries. Discover skills from GitHub, private Git, and local directories — then deploy them to any project with one click.
 
-SkillVault helps you organize, discover, and dispatch skills to your development projects. It provides a clean UI for browsing your skill collection, bulk dispatching to multiple projects, and managing your skill repository.
+## Features
 
-## ✨ Features
+- **Multi-source Management** — Add skills from GitHub, GitLab, Gitee, or local directories
+- **Auto Discovery** — Scan repositories and automatically identify skill files (SKILL.md, skill.json, etc.)
+- **AI Analysis** — Connect an OpenAI-compatible API to auto-generate skill descriptions, tags, and quality scores
+- **Smart Dispatch** — Deploy skills to project directories via Symlink, Copy, or Hardlink
+- **Dispatch Templates** — Save groups of skills as templates for one-click bulk deployment
+- **Sync Tracking** — Monitor dispatch status (Synced / Outdated / Conflict / Error) with one-click re-sync
+- **Search & Filter** — Full-text search with filtering by name, tags, type, and source
+- **Local First** — All data stored in local SQLite, no cloud account required
+- **Cross Platform** — Built with Tauri 2.x, runs on Windows, macOS, and Linux
 
-- **Skill Discovery** - Automatically scan and discover skills from your configured skill repository
-- **Skill Management** - Browse, search, filter, and organize your skills with tags and metadata
-- **Bulk Dispatch** - Dispatch multiple skills at once to target projects using symlinks, copies, or hardlinks
-- **Dark/Light Mode** - Beautiful UI with built-in dark and light theme support
-- **Local First** - All data stored locally in SQLite database, no cloud required
-- **Cross Platform** - Built with Tauri, runs on Windows, macOS, and Linux
+## Quick Start
 
-## 🔍 Key Features
+### Prerequisites
 
-- **Skill Discovery**: Auto-discover skills from your local Git repositories
-- **Search**: Full-text search across skill names, descriptions, and tags
-- **Filtering**: Filter by skill status, type, and source
-- **Bulk Operations**: Select multiple skills and dispatch them to any configured project directory
-- **Multiple Dispatch Methods**:
-  - Symlink (recommended) - share skill files across multiple projects without duplicating
-  - Copy - create a full copy of skill files in the target directory
-  - Hardlink - create filesystem hardlinks to share the same files
-- **Quality Scoring**: Track quality scores for your skills
-- **Dependency Tracking**: Keep track of skill dependencies
+- [Node.js](https://nodejs.org/) 18+
+- [Rust](https://rustup.rs/) (latest stable)
+- OS: Windows 10+, macOS 10.15+, or Linux
 
-## 🚀 Quick Start
+### Development
 
-### Download
+```bash
+# Clone the repository
+git clone https://github.com/zengym-sally/skill-vaults.git
+cd skill-vaults
 
-Download the latest release from the [Releases](https://github.com/yourusername/skill-vault/releases) page.
+# Install frontend dependencies
+npm install
+
+# Start development server (Vite + Rust backend)
+npm run tauri dev
+```
+
+### Build
+
+```bash
+# Build production app
+npm run tauri build
+```
 
 ### First Run
 
-1. On first launch, you'll be guided through onboarding
-2. Configure your skill repository base path (where your skills are stored)
-3. Click "Discover Skills" to import all your skills
-4. Add target directories for your projects in Settings
-5. Start browsing and dispatching skills!
+1. Launch the app — you'll be guided through onboarding
+2. Set your skill repository base path (where skills will be stored locally)
+3. Add a Git repository URL (e.g., a GitHub repo containing skills)
+4. Skills are automatically scanned and indexed
+5. Go to **Dispatches** → add a target project directory → dispatch skills
 
-## 📋 Requirements
-
-- Any modern OS that supports Tauri (Windows 10+, macOS 10.15+, Linux)
-- Approximately 50MB disk space for the application
-- Your skill repository (collection of OpenCode skills)
-
-## 📖 Usage
+## Usage
 
 ### Skills Page
 
-The main page lists all your discovered skills. You can:
-
-- Search by name, description, or tags
-- Select multiple skills for bulk dispatch
-- Click "Discover Skills" to rescan for new skills
-- Delete skills you no longer need
-- Dispatch individual or bulk skills to your projects
+Browse all discovered skills with search and filtering. View AI-generated summaries, tags, and quality scores. Select skills for bulk dispatch.
 
 ### Dispatches Page
 
-View your recent dispatch history and track what skills have been dispatched to which projects.
+Manage target project directories and deployed skills. Sync individual or all skills. Track status and resolve conflicts.
 
-### Settings Page
+### Templates
 
-- Configure application preferences
-- Add/remove target project directories for dispatching
-- Manage theme settings
-- Configure your skill repository base path
+Create dispatch templates — named groups of skills for quick deployment to new projects.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Tailwind CSS, Vite, shadcn/ui
-- **Backend**: Tauri 2.x (Rust)
-- **Database**: SQLite via Tauri SQL plugin
-- **State Management**: Zustand
-- **Routing**: React Router
-- **Icons**: Lucide React
+| Layer        | Technologies                                                 |
+| ------------ | ------------------------------------------------------------ |
+| **Frontend** | React 19, TypeScript, Tailwind CSS, shadcn/ui, Zustand, Vite |
+| **Backend**  | Rust, Tauri 2.x, sqlx + SQLite, git2-rs                      |
+| **Build**    | Vite, Cargo, Tauri CLI                                       |
 
-## 📄 License
+## Architecture
 
-MIT
+```
+Frontend (React)                Backend (Rust)
+┌──────────────────┐           ┌──────────────────┐
+│  React Pages     │  invoke() │  Tauri Commands   │
+│  Zustand Stores  │ ────────► │  Git Operations   │
+│  shadcn/ui       │           │  LLM Client       │
+│  Tailwind CSS    │           │  SQLite Database   │
+└──────────────────┘           └──────────────────┘
+```
 
-## 🙏 Acknowledgments
+## Project Structure
 
-- Built for [OhMyOpenCode](https://github.com/ohmyopencode/ohmyopencode) ecosystem
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Powered by [Tauri](https://tauri.app/)
+```
+├── src/                    # React frontend
+│   ├── pages/              # Page components (Skills, Dispatches, Settings)
+│   ├── components/         # Reusable UI components
+│   ├── store/              # Zustand state stores
+│   ├── types/              # TypeScript type definitions
+│   └── lib/                # Utility functions
+├── src-tauri/              # Rust backend
+│   └── src/
+│       ├── main.rs         # Tauri command handlers
+│       ├── db/             # Database schema and CRUD
+│       ├── git/            # Git clone, pull, auth
+│       ├── skills/         # Skill discovery, analysis
+│       ├── dispatch/       # Dispatch methods, sync
+│       ├── llm/            # OpenAI-compatible client
+│       └── config/         # Configuration management
+├── CLAUDE.md               # AI assistant development guide
+└── LICENSE                 # MIT License
+```
+
+## Testing
+
+```bash
+# Frontend tests
+npm run test:run
+
+# Rust tests
+cd src-tauri && cargo test
+```
+
+## License
+
+[MIT](LICENSE)
